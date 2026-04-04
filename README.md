@@ -7,6 +7,12 @@
 
 **Portfolio-grade CLI** (and optional **HTTP API**) that routes natural-language questions to **specialized agents**—repository analysis, GitHub project context, and technical research—backed by **OpenAI tool calling** and an **MCP-style** in-process layer: tool **registry**, **JSON Schema** validation, **tiktoken** budgets, ranked context, and disk cache.
 
+## Demo
+
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="adt ask demo" width="800">
+</p>
+
 ---
 
 ## Contents
@@ -345,13 +351,11 @@ Full contributor notes: [`docs/contributing.md`](docs/contributing.md).
 
 Aligned with **Phase 7** / [`docs/portfolio.md`](docs/portfolio.md):
 
-- [ ] Record a **terminal demo** ([asciinema](https://asciinema.org/) or similar): `adt ask`, multi-repo `--repo`, `adt config show`, optional `curl` to `/ask`.
-- [ ] **Embed or link** the demo in this README (replace the placeholder below).
+- [x] Record a **terminal demo** and embed in README (`docs/assets/demo.gif`).
+- [x] **Embed** the demo GIF at the top of the README.
 - [ ] Add a **one-paragraph** project card on your personal site with links to GitHub, PyPI, and `docs/architecture.md`.
 - [ ] Optional: short **article** (blog/LinkedIn)—problem, architecture, trade-offs.
 - [ ] Close or archive **GitHub milestones/issues** when you consider the roadmap complete.
-
-**Demo (placeholder — add your recording URL):** *Coming soon: asciinema / GIF link.*
 
 ---
 

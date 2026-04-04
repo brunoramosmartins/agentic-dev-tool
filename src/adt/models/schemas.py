@@ -23,6 +23,13 @@ class QueryRequest(BaseModel):
         default_factory=dict,
         description="Arbitrary flags and metadata (e.g. routing hints, verbosity).",
     )
+    force_agent: str | None = Field(
+        default=None,
+        description=(
+            "When set, skip supervisor routing and use this agent id "
+            "(e.g. research_agent, repo_agent)."
+        ),
+    )
 
 
 class ToolCall(BaseModel):
@@ -72,6 +79,10 @@ class AgentResponse(BaseModel):
     context_summary: str = Field(
         default="",
         description="Short description of context that was available (for logging).",
+    )
+    routed_agent: str = Field(
+        default="",
+        description="Agent id that produced the answer (after routing or force_agent).",
     )
 
 

@@ -14,6 +14,7 @@ from adt.models.schemas import (
     AgentResponse,
     LLMMessage,
     QueryRequest,
+    RoutedRequest,
     ToolCall,
 )
 
@@ -65,10 +66,26 @@ class Runner:
 
     def run(self, request: QueryRequest) -> AgentResponse:
         """Route the query, build context, run the LLM/tool loop, return an answer."""
-        routed = self._supervisor.route(request)
+        if request.force_agent is not None:
+            if request.force_agent not in self._agents:
+                unknown = request.force_agent
+                known = ", ".join(sorted(self._agents))
+                return AgentResponse(
+                    answer=(f"Unknown agent {unknown!r}. Valid choices: {known}."),
+                    tools_used=[],
+                    context_summary="",
+                    routed_agent=request.force_agent or "",
+                )
+            enriched = request.model_copy(deep=True)
+            enriched.options = {**enriched.options, "route": "forced"}
+            routed = RoutedRequest(agent_name=request.force_agent, request=enriched)
+        else:
+            routed = self._supervisor.route(request)
         agent = self._agents[routed.agent_name]
 
-        if routed.request.repo_path:
+        if routed.agent_name == "research_agent":
+            raw_context = self._context.build_from_text("")
+        elif routed.request.repo_path:
             raw_context = self._context.build_from_repo(routed.request.repo_path)
         else:
             raw_context = self._context.build_from_text("")
@@ -124,6 +141,7 @@ class Runner:
                 answer=reply.content.strip(),
                 tools_used=tools_used,
                 context_summary=context_summary,
+                routed_agent=routed.agent_name,
             )
 
         logger.warning("runner_max_iterations exceeded agent=%s", routed.agent_name)
@@ -134,6 +152,7 @@ class Runner:
             ),
             tools_used=tools_used,
             context_summary=context_summary,
+            routed_agent=routed.agent_name,
         )
 
     def _tools_for_agent(self, agent: BaseAgent) -> list[dict[str, Any]]:

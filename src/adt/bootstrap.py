@@ -15,6 +15,7 @@ from adt.mcp.context import ContextBuilder
 from adt.mcp.executor import ExecutionController
 from adt.mcp.registry import ToolDefinition, ToolRegistry
 from adt.tools import repo as repo_tools
+from adt.tools import research as research_tools
 
 
 def register_repo_tools(registry: ToolRegistry, repo_root: Path) -> None:
@@ -135,6 +136,75 @@ def register_repo_tools(registry: ToolRegistry, repo_root: Path) -> None:
     )
 
 
+def register_research_tools(registry: ToolRegistry) -> None:
+    """Register arXiv search and article fetch tools for ``research_agent``.
+
+    Handlers are stateless and open short-lived HTTP clients per call.
+
+    Args:
+        registry: Registry that must not already define ``search_papers`` or
+            ``fetch_article``.
+    """
+    registry.register(
+        ToolDefinition(
+            name="search_papers",
+            description=(
+                "Search arXiv for academic papers by keywords or phrases. "
+                "Returns titles, authors, abstract snippets, and abstract URLs."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search terms (mapped to arXiv all: query).",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Max papers to return (1–50, default 10).",
+                        "minimum": 1,
+                        "maximum": 50,
+                    },
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+            allowed_agents=["research_agent"],
+            handler=research_tools.search_papers,
+        ),
+    )
+    registry.register(
+        ToolDefinition(
+            name="fetch_article",
+            description=(
+                "Fetch a public http(s) web page and return extracted plain text. "
+                "Use for HTML or text articles; local and private hosts are blocked."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "Absolute http or https URL to download.",
+                    },
+                    "max_chars": {
+                        "type": "integer",
+                        "description": (
+                            "Maximum characters of extracted text (default 80000)."
+                        ),
+                        "minimum": 1000,
+                        "maximum": 500000,
+                    },
+                },
+                "required": ["url"],
+                "additionalProperties": False,
+            },
+            allowed_agents=["research_agent"],
+            handler=research_tools.fetch_article,
+        ),
+    )
+
+
 def build_runner_for_repo(
     repo_root: Path,
     *,
@@ -151,10 +221,11 @@ def build_runner_for_repo(
         max_tool_iterations: Upper bound on LLM/tool round-trips.
 
     Returns:
-        A fully wired runner with repo tools registered for ``repo_agent``.
+        A fully wired runner with repo and research tools registered.
     """
     registry = ToolRegistry()
     register_repo_tools(registry, repo_root)
+    register_research_tools(registry)
     supervisor = Supervisor()
     llm = LLMClient(model=model, api_key=api_key)
     context = ContextBuilder()

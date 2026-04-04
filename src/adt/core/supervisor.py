@@ -14,19 +14,30 @@ _PROJECT_KEYWORDS = (
 )
 _RESEARCH_KEYWORDS = (
     "paper",
+    "papers",
+    "arxiv",
     "article",
     "research",
-    "search",
     "study",
     "literature",
+    "literature review",
+    "publication",
+    "survey",
+    "citation",
+    "journal",
+    "preprint",
+    "doi",
 )
 _REPO_KEYWORDS = (
     "repo",
     "code",
+    "codebase",
     "architecture",
     "explain",
     "file",
     "function",
+    "implementation",
+    "search",
 )
 
 
@@ -37,7 +48,9 @@ class Supervisor:
         """Return the agent name and a possibly enriched ``QueryRequest``.
 
         Precedence: project keywords, then research, then repository, then default
-        ``repo_agent``. Matching is case-insensitive via substring search.
+        ``repo_agent``. Matching is case-insensitive via substring search. The word
+        ``search`` maps to the repository agent so that codebase queries are not
+        misrouted to research.
         """
         text = request.query.lower()
         enriched = request.model_copy(deep=True)

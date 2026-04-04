@@ -79,4 +79,5 @@ class RepoAgent(BaseAgent):
             ),
             tools_used=list(self.tools),
             context_summary=built[:400],
+            routed_agent=self.name,
         )

@@ -11,6 +11,7 @@ class ProjectAgent(BaseAgent):
 
     @property
     def system_prompt(self) -> str:
+        """Return a short stub prompt until GitHub tools land in Phase 4."""
         return (
             "You are a technical project manager. "
             "Summarize issues and milestones when tools exist."
@@ -18,9 +19,11 @@ class ProjectAgent(BaseAgent):
 
     @property
     def tools(self) -> list[str]:
+        """No registered tools yet for this agent."""
         return []
 
     def handle(self, request: QueryRequest, context: str) -> AgentResponse:
+        """Echo the query as a stub response for tests and future orchestration."""
         return AgentResponse(
             answer=f"(stub project_agent) Query: {request.query!r}",
             tools_used=[],

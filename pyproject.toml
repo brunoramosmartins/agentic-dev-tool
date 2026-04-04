@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-dev-tool"
-version = "0.2.0"
+version = "0.3.0"
 description = "Context-oriented AI assistant CLI with a simplified MCP-style tool layer."
 readme = "README.md"
 license = { text = "MIT" }
@@ -29,6 +29,7 @@ dependencies = [
   "openai>=1.0",
   "rich>=13.0",
   "jsonschema>=4.20",
+  "pathspec>=0.12",
 ]
 
 [project.optional-dependencies]
@@ -78,9 +79,13 @@ packages = ["adt"]
 module = "jsonschema"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "pathspec"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra -q --strict-markers"
+addopts = "-ra -q --strict-markers -m \"not live\""
 markers = [
   "live: calls real external APIs (not run in CI by default)",
 ]

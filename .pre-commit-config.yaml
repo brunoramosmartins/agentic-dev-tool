@@ -17,6 +17,7 @@ repos:
           - types-setuptools
           - jsonschema>=4.20
           - openai>=1.0
+          - pathspec>=0.12
         args: [--config-file=pyproject.toml]
         files: ^src/
 

@@ -55,6 +55,14 @@ class Runner:
         self._agents = agents
         self._max_tool_iterations = max_tool_iterations
 
+    @property
+    def last_token_usage(self) -> dict[str, int]:
+        """Return token counts from the last LLM call when the backend exposes them."""
+        raw = getattr(self._llm, "last_usage", None)
+        if isinstance(raw, dict):
+            return raw
+        return {}
+
     def run(self, request: QueryRequest) -> AgentResponse:
         """Route the query, build context, run the LLM/tool loop, return an answer."""
         routed = self._supervisor.route(request)

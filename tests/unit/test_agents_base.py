@@ -19,4 +19,5 @@ def test_repo_agent_name_and_handle() -> None:
     assert a.name == "repo_agent"
     r = a.handle(QueryRequest(query="q"), context="ctx")
     assert isinstance(r, AgentResponse)
-    assert "stub" in r.answer
+    assert "repo_agent" in r.answer
+    assert r.tools_used

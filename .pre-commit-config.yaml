@@ -18,6 +18,7 @@ repos:
           - jsonschema>=4.20
           - openai>=1.0
           - pathspec>=0.12
+          - tiktoken>=0.5
         args: [--config-file=pyproject.toml]
         files: ^src/
 

@@ -24,6 +24,14 @@ adt ask "your question" --repo . --agent project_agent
 
 Valid values: `repo_agent`, `research_agent`, `project_agent`.
 
+## MCP context (Phase 5)
+
+When the runner builds repository context for `repo_agent` (and related paths), it:
+
+- **Ranks** candidate files by query keywords, extension priority, and size, then packs text until a **tiktoken** budget is reached (split: system 20%, context 50%, tools 10%, completion 20% of `ADT_TOKEN_BUDGET`, default 16384).
+- **Caches** `read_repo_tree` results under `~/.adt/cache/` keyed by repo path and current `git` HEAD, with TTL `ADT_CACHE_TTL` (default 300s). Use CLI **`--no-cache`** to bypass.
+- **Logs** structured JSON lines to `~/.adt/logs/adt.jsonl` with **`--log-level`** (`DEBUG` / `INFO` / `WARNING` / `ERROR`).
+
 ## `repo_agent`
 
 **Purpose:** Understand a local checkout (layout, files, symbols).

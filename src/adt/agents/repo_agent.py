@@ -69,7 +69,10 @@ class RepoAgent(BaseAgent):
         """
         builder = ContextBuilder()
         if request.repo_path:
-            built = builder.build_from_repo(request.repo_path)
+            built = builder.build_from_repo(
+                request.repo_path,
+                query=request.query,
+            )
         else:
             built = builder.build_from_text(context or "")
         return AgentResponse(

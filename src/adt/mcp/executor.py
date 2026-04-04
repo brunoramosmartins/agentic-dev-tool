@@ -131,4 +131,4 @@ class ExecutionController:
         }
         if error is not None:
             payload["error"] = error
-        logger.info("%s", json.dumps(payload, default=str))
+        logger.info("", extra={"adt": payload})

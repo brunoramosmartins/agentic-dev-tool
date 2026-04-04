@@ -8,7 +8,7 @@ A context-oriented AI assistant CLI built with a simplified Model Context Protoc
 
 ## Status
 
-**Phase 4 — Project Agent:** `adt ask` supports **local paths** or **`owner/repo`** for `--repo`. The **project agent** calls the **GitHub REST API** for issues and milestones and reads **local markdown** (e.g. `README.md`, `ROADMAP.md`). Use **`GITHUB_TOKEN`** or **`--token`** for higher rate limits and private repositories. See [docs/agents.md](docs/agents.md).
+**Phase 5 — MCP hardening:** Context packing uses **tiktoken** budgets (20/50/10/20 split for system/context/tools/response), **ranked** file selection from the user query, and a **disk cache** for repo tree listings under `~/.adt/cache` (keyed by path + `git rev-parse HEAD`, TTL configurable). **JSON logs** append to `~/.adt/logs/adt.jsonl` (`--log-level`). **`Phase 4`** still applies: local/`owner/repo` `--repo`, GitHub project tools, `GITHUB_TOKEN` / `--token`. See [docs/agents.md](docs/agents.md).
 
 ## Installation
 
@@ -45,6 +45,8 @@ cp .env.example .env
 | `OPENAI_API_KEY` | Yes, for `ask` | OpenAI API key for chat completions. |
 | `GITHUB_TOKEN` | No | GitHub PAT for `read_issues` / `read_milestones` (higher rate limits, private repos). |
 | `ADT_LIVE_MODEL` | No | Optional model override for `pytest -m live` (default `gpt-4o-mini`). |
+| `ADT_TOKEN_BUDGET` | No | Logical token window for one `ask` turn (default `16384`). |
+| `ADT_CACHE_TTL` | No | Repo tree cache TTL in seconds (default `300`). |
 
 ## Usage
 
@@ -84,7 +86,9 @@ adt ask "List issues" --repo myorg/repo --agent project_agent
 - `--repo`, `-r` — **Local directory** (must exist) **or** **`owner/repo`** GitHub slug. Slug form uses `cwd` as the markdown root.
 - `--token` — GitHub PAT for this run (overrides `GITHUB_TOKEN` when set).
 - `--agent`, `-a` — `repo_agent`, `research_agent`, or `project_agent`.
-- `--verbose`, `-v` — debug logging, last token usage, and a truncated context summary.
+- `--verbose`, `-v` — debug logging, last token usage, estimated token budget, and a truncated context summary.
+- `--log-level` — `DEBUG`, `INFO`, `WARNING`, or `ERROR` for JSON file logging (default `INFO`; `--verbose` forces `DEBUG`).
+- `--no-cache` — skip reading/writing the repo tree cache for this run.
 - `--model`, `-m` — OpenAI model name (default: `gpt-4o-mini`).
 
 Other commands:

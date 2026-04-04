@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import time
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Protocol
 
 from adt.agents.base import BaseAgent
+from adt.logging.json_log import log_adt
+from adt.mcp.budget import allocate_budget
 from adt.mcp.context import ContextBuilder
 from adt.mcp.executor import ExecutionController
 from adt.mcp.registry import ToolRegistry
@@ -31,6 +35,8 @@ class LLMBackend(Protocol):
         self,
         messages: Sequence[LLMMessage],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        max_completion_tokens: int | None = None,
     ) -> LLMMessage: ...
 
 
@@ -55,6 +61,7 @@ class Runner:
         self._registry = registry
         self._agents = agents
         self._max_tool_iterations = max_tool_iterations
+        self.last_budget_report: dict[str, Any] = {}
 
     @property
     def last_token_usage(self) -> dict[str, int]:
@@ -66,6 +73,10 @@ class Runner:
 
     def run(self, request: QueryRequest) -> AgentResponse:
         """Route the query, build context, run the LLM/tool loop, return an answer."""
+        t0 = time.perf_counter()
+        self.last_budget_report = {}
+        use_cache = not bool(request.options.get("no_cache", False))
+
         if request.force_agent is not None:
             if request.force_agent not in self._agents:
                 unknown = request.force_agent
@@ -103,30 +114,97 @@ class Runner:
             if req.github_owner and req.github_repo:
                 raw_context = self._context.build_from_text(meta)
             elif req.repo_path:
-                repo_blob = self._context.build_from_repo(req.repo_path)
+                repo_blob = self._context.build_from_repo(
+                    req.repo_path,
+                    query=req.query,
+                    use_cache=use_cache,
+                )
                 raw_context = f"{meta}\n\n{repo_blob}" if meta else repo_blob
             else:
                 raw_context = self._context.build_from_text(meta)
         elif req.repo_path:
-            raw_context = self._context.build_from_repo(req.repo_path)
+            raw_context = self._context.build_from_repo(
+                req.repo_path,
+                query=req.query,
+                use_cache=use_cache,
+            )
         else:
             raw_context = self._context.build_from_text("")
 
-        context_summary = raw_context[:400]
+        alloc = allocate_budget(self._context.total_token_budget)
+        sys_prompt = agent.system_prompt
+        if self._context.count_text_tokens(sys_prompt) > alloc["system"]:
+            sys_prompt = self._context.trim_context(sys_prompt, alloc["system"])
+
         user_content = (
             f"{raw_context}\n\nUser question:\n{routed.request.query.strip()}\n"
         )
+        if self._context.count_text_tokens(user_content) > alloc["context"]:
+            user_content = self._context.trim_context(user_content, alloc["context"])
 
+        context_summary = raw_context[:400]
         messages: list[LLMMessage] = [
-            LLMMessage(role="system", content=agent.system_prompt),
+            LLMMessage(role="system", content=sys_prompt),
             LLMMessage(role="user", content=user_content),
         ]
 
         tools_openai = self._tools_for_agent(agent)
+        tools_json = json.dumps(tools_openai or [], default=str)
+        tools_tok = self._context.count_text_tokens(tools_json)
+        if tools_tok > alloc["tools"]:
+            log_adt(
+                logger,
+                logging.WARNING,
+                event="tools_schema_over_budget",
+                estimated_tokens=tools_tok,
+                budget=alloc["tools"],
+            )
+
+        self.last_budget_report = {
+            "allocated": alloc,
+            "estimated_system_tokens": self._context.count_text_tokens(sys_prompt),
+            "estimated_user_tokens": self._context.count_text_tokens(user_content),
+            "estimated_tools_schema_tokens": tools_tok,
+        }
+
         tools_used: list[str] = []
 
+        log_adt(
+            logger,
+            logging.INFO,
+            event="agent_selected",
+            agent=routed.agent_name,
+            route=routed.request.options.get("route"),
+            query_preview=routed.request.query[:500],
+            force_agent=routed.request.force_agent,
+        )
+
         for _ in range(self._max_tool_iterations):
-            reply = self._llm.chat(messages, tools_openai or None)
+            try:
+                reply = self._llm.chat(
+                    messages,
+                    tools_openai or None,
+                    max_completion_tokens=alloc["response"],
+                )
+            except Exception as exc:  # noqa: BLE001 — user-facing fallback
+                log_adt(
+                    logger,
+                    logging.ERROR,
+                    event="llm_failure",
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                    agent=routed.agent_name,
+                )
+                return AgentResponse(
+                    answer=(
+                        "The language model request failed or timed out. "
+                        f"({type(exc).__name__}: {exc}). "
+                        "Check OPENAI_API_KEY, network connectivity, and quota."
+                    ),
+                    tools_used=tools_used,
+                    context_summary=context_summary,
+                    routed_agent=routed.agent_name,
+                )
 
             if reply.tool_calls:
                 assistant_tc = [
@@ -148,6 +226,13 @@ class Runner:
                 for tc in assistant_tc:
                     result = self._executor.execute(tc)
                     tools_used.append(tc.name)
+                    log_adt(
+                        logger,
+                        logging.INFO,
+                        event="tool_called",
+                        tool=tc.name,
+                        success=result.success,
+                    )
                     messages.append(
                         LLMMessage(
                             role="tool",
@@ -159,6 +244,17 @@ class Runner:
                     )
                 continue
 
+            elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
+            usage = self.last_token_usage
+            log_adt(
+                logger,
+                logging.INFO,
+                event="request_completed",
+                agent=routed.agent_name,
+                duration_ms=elapsed_ms,
+                tools_used=tools_used,
+                **usage,
+            )
             return AgentResponse(
                 answer=reply.content.strip(),
                 tools_used=tools_used,
@@ -167,6 +263,13 @@ class Runner:
             )
 
         logger.warning("runner_max_iterations exceeded agent=%s", routed.agent_name)
+        log_adt(
+            logger,
+            logging.WARNING,
+            event="runner_max_iterations",
+            agent=routed.agent_name,
+            tools_used=tools_used,
+        )
         return AgentResponse(
             answer=(
                 "Stopped after maximum tool iterations "

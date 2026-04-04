@@ -78,12 +78,18 @@ class LLMClient:
         api_key: str | None = None,
         *,
         max_retries: int = 3,
+        timeout: float = 120.0,
         client: OpenAI | None = None,
     ) -> None:
         self._model = model
         self._max_retries = max(1, max_retries)
-        self._client = client or OpenAI(api_key=api_key)
+        self._client = client or OpenAI(api_key=api_key, timeout=timeout)
         self._last_usage: dict[str, int] = {}
+
+    @property
+    def model(self) -> str:
+        """Configured chat model name."""
+        return self._model
 
     @property
     def last_usage(self) -> dict[str, int]:
@@ -94,6 +100,8 @@ class LLMClient:
         self,
         messages: Sequence[LLMMessage],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        max_completion_tokens: int | None = None,
     ) -> LLMMessage:
         """Send chat messages and return the assistant (or tool-bearing) reply."""
         payload = _messages_to_openai(messages)
@@ -103,6 +111,8 @@ class LLMClient:
         }
         if tools:
             kwargs["tools"] = tools
+        if max_completion_tokens is not None:
+            kwargs["max_tokens"] = max_completion_tokens
 
         last_error: Exception | None = None
         for attempt in range(self._max_retries):
@@ -116,7 +126,10 @@ class LLMClient:
                         "completion_tokens": usage.completion_tokens,
                         "total_tokens": usage.total_tokens,
                     }
-                    logger.info("llm_usage %s", self._last_usage)
+                    logger.info(
+                        "",
+                        extra={"adt": {"event": "llm_usage", **self._last_usage}},
+                    )
                 tool_calls = _tool_calls_from_openai(choice.tool_calls)
                 return LLMMessage(
                     role="assistant",
@@ -129,10 +142,15 @@ class LLMClient:
                 if code in _RETRY_STATUS and attempt < self._max_retries - 1:
                     delay = 2**attempt
                     logger.warning(
-                        "llm_retry attempt=%s code=%s sleep=%ss",
-                        attempt + 1,
-                        code,
-                        delay,
+                        "",
+                        extra={
+                            "adt": {
+                                "event": "llm_retry",
+                                "attempt": attempt + 1,
+                                "status_code": code,
+                                "sleep_s": delay,
+                            },
+                        },
                     )
                     time.sleep(delay)
                     continue

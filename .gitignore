@@ -40,5 +40,5 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Project-local planning (not tracked)
-ROADMAP.md
+# Project-local planning at repo root only (fixture copy under tests/ is tracked)
+/ROADMAP.md

@@ -11,7 +11,7 @@ from adt.agents.research_agent import ResearchAgent
 from adt.core.llm import LLMClient
 from adt.core.runner import Runner
 from adt.core.supervisor import Supervisor
-from adt.mcp.context import ContextBuilder
+from adt.mcp.context import ContextBuilder, default_cache_ttl
 from adt.mcp.executor import ExecutionController
 from adt.mcp.registry import ToolDefinition, ToolRegistry
 from adt.tools import project as project_tools
@@ -370,6 +370,9 @@ def build_runner(
     api_key: str | None = None,
     github_token: str | None = None,
     max_tool_iterations: int = 5,
+    use_context_cache: bool = True,
+    context_cache_ttl: float | None = None,
+    token_budget_total: int | None = None,
 ) -> Runner:
     """Construct a :class:`~adt.core.runner.Runner` for the full agent/tool set.
 
@@ -379,6 +382,9 @@ def build_runner(
         api_key: Optional API key (falls back to ``OPENAI_API_KEY`` in the client).
         github_token: Optional token forwarded to GitHub REST tools.
         max_tool_iterations: Upper bound on LLM/tool round-trips.
+        use_context_cache: When True, cache repository tree listings on disk.
+        context_cache_ttl: Override tree cache TTL (seconds).
+        token_budget_total: Override logical token window for context budgeting.
 
     Returns:
         A runner with repo, research, and project tools registered.
@@ -390,7 +396,13 @@ def build_runner(
     register_project_tools(registry, root, token=github_token)
     supervisor = Supervisor()
     llm = LLMClient(model=model, api_key=api_key)
-    context = ContextBuilder()
+    ttl = context_cache_ttl if context_cache_ttl is not None else default_cache_ttl()
+    context = ContextBuilder(
+        tiktoken_model=model,
+        use_repo_tree_cache=use_context_cache,
+        cache_ttl_seconds=ttl,
+        total_token_budget=token_budget_total,
+    )
     executor = ExecutionController(registry)
     agents: dict[str, BaseAgent] = {
         "repo_agent": RepoAgent(),
@@ -415,6 +427,9 @@ def build_runner_for_repo(
     api_key: str | None = None,
     github_token: str | None = None,
     max_tool_iterations: int = 5,
+    use_context_cache: bool = True,
+    context_cache_ttl: float | None = None,
+    token_budget_total: int | None = None,
 ) -> Runner:
     """Backward-compatible alias for :func:`build_runner` with a repository path."""
     return build_runner(
@@ -423,4 +438,7 @@ def build_runner_for_repo(
         api_key=api_key,
         github_token=github_token,
         max_tool_iterations=max_tool_iterations,
+        use_context_cache=use_context_cache,
+        context_cache_ttl=context_cache_ttl,
+        token_budget_total=token_budget_total,
     )

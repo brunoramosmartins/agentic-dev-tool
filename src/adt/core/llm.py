@@ -157,3 +157,41 @@ class LLMClient:
                 raise
         assert last_error is not None
         raise last_error
+
+    def complete_json_object(
+        self,
+        *,
+        system: str,
+        user: str,
+        model: str | None = None,
+        max_completion_tokens: int = 120,
+    ) -> dict[str, Any]:
+        """Single-turn JSON object completion (routing, tiny structured outputs)."""
+        use_model = model or self._model
+        kwargs: dict[str, Any] = {
+            "model": use_model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "max_tokens": max_completion_tokens,
+            "response_format": {"type": "json_object"},
+        }
+        completion = self._client.chat.completions.create(**kwargs)
+        choice = completion.choices[0].message
+        usage = completion.usage
+        if usage is not None:
+            self._last_usage = {
+                "prompt_tokens": usage.prompt_tokens,
+                "completion_tokens": usage.completion_tokens,
+                "total_tokens": usage.total_tokens,
+            }
+        text = (choice.content or "").strip()
+        if not text:
+            return {}
+        try:
+            parsed: Any = json.loads(text)
+        except json.JSONDecodeError as exc:
+            msg = "router returned non-json"
+            raise ValueError(msg) from exc
+        return parsed if isinstance(parsed, dict) else {}

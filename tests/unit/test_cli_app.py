@@ -27,6 +27,59 @@ def test_cli_info() -> None:
     assert "ask" in result.stdout.lower()
 
 
+def test_cli_config_show() -> None:
+    """``config show`` prints effective settings."""
+    runner = CliRunner()
+    result = runner.invoke(app, ["config", "show"])
+    assert result.exit_code == 0
+    assert "default_model" in result.stdout
+
+
+def test_cli_config_path() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["config", "path"])
+    assert result.exit_code == 0
+    assert ".adt" in result.stdout and "config.toml" in result.stdout
+
+
+def test_cli_config_set_writes_file(tmp_path, monkeypatch) -> None:
+    from adt import config as cfgmod
+
+    p = tmp_path / "cfg.toml"
+    monkeypatch.setattr(cfgmod, "adt_config_path", lambda: p)
+    runner = CliRunner()
+    result = runner.invoke(app, ["config", "set", "log_level", "WARNING"])
+    assert result.exit_code == 0
+    assert p.is_file()
+    assert "WARNING" in p.read_text(encoding="utf-8")
+
+
+@patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}, clear=False)
+@patch("adt.cli.app.build_runner")
+def test_cli_ask_multi_repo(mock_build, tmp_path) -> None:
+    mock_runner = MagicMock()
+    mock_runner.run.return_value = AgentResponse(
+        answer="ok",
+        tools_used=[],
+        context_summary="",
+        routed_agent="repo_agent",
+    )
+    mock_build.return_value = mock_runner
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["ask", "compare trees", "--repo", str(a), "--repo", str(b)],
+    )
+    assert result.exit_code == 0
+    roots = mock_build.call_args[0][0]
+    assert isinstance(roots, dict)
+    assert len(roots) == 2
+
+
 def test_cli_ask_requires_api_key(tmp_path) -> None:
     """``ask`` without ``OPENAI_API_KEY`` must exit with an error."""
     runner = CliRunner()

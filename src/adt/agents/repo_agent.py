@@ -22,6 +22,10 @@ _REPO_SYSTEM_PROMPT = """You are a senior software engineer analyzing a codebase
 - Read tests to understand expected behavior when relevant.
 
 ## Tool usage
+- When multiple repositories are loaded, each tool accepts an optional ``repo_key``
+  (e.g. ``r0``, ``r1``) to choose which root to use; omit it only when a single repo
+  exists.
+- Use ``compare_repos`` to diff two registered roots (structure, key manifests).
 - Always begin with read_repo_tree unless the user already provided exact file paths.
 - Do not read more than five files in a single request unless strictly necessary.
 - Prefer search_code for locating symbols instead of reading large files blindly.
@@ -51,7 +55,7 @@ class RepoAgent(BaseAgent):
     @property
     def tools(self) -> list[str]:
         """Names of tools registered for this agent in :mod:`adt.bootstrap`."""
-        return ["read_repo_tree", "read_file", "search_code"]
+        return ["read_repo_tree", "read_file", "search_code", "compare_repos"]
 
     def handle(self, request: QueryRequest, context: str) -> AgentResponse:
         """Build a short preview of context without invoking the LLM.

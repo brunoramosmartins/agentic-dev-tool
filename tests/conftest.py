@@ -19,7 +19,7 @@ def tool_registry(sample_repo_path: str) -> ToolRegistry:
     """A tool registry with repo tools bound to the sample fixture repository."""
     reg = ToolRegistry()
     root = Path(sample_repo_path)
-    register_repo_tools(reg, root)
+    register_repo_tools(reg, {"r0": root})
     register_research_tools(reg)
     register_project_tools(reg, root, token=None)
     return reg

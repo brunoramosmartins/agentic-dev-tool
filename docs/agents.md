@@ -6,10 +6,13 @@ This document summarizes built-in agents, their tools, and how routing works.
 
 - **Existing directory:** used as the root for **repo tools** (`repo_agent`) and **markdown reads** (`project_agent`). `QueryRequest.repo_path` is that directory; no default GitHub slug is implied.
 - **`owner/repo` slug** (only when that string is **not** an existing path): `repo_path` is set to the **current working directory** (markdown root), and `github_owner` / `github_repo` are filled for session hints. The runner defaults ambiguous queries to **`project_agent`** (see below).
+- **Multiple `--repo` values:** unique local roots get stable ids **`r0`**, **`r1`**, … Tools accept optional **`repo_key`** to pick a root. `QueryRequest.additional_repo_paths` lists extras after the primary `repo_path`.
 
 ## Supervisor routing
 
-The supervisor inspects the user query (lowercased) with simple substring rules, in order:
+By default the app uses a **hybrid** router: a small **JSON LLM call** proposes `repo_agent` / `project_agent` / `research_agent`; on failure or when disabled (`use_llm_routing` in config / env), the same **keyword rules** as before apply.
+
+Keyword fallback (lowercased query), in order:
 
 1. **Project** — keywords such as `issue`, `issues`, `milestone`, `roadmap`, `project`, `sprint`, `backlog`, `github`, `epic`, `ticket`, `release`, `kanban`, `board`, `assignee`, `pull request`, `triaged` → `project_agent`.
 2. **Research** — keywords such as `paper`, `papers`, `arxiv`, `article`, `research`, `literature`, `survey`, `publication`, `journal`, `preprint`, `doi`, and the phrase `literature review` → `research_agent`.
@@ -24,6 +27,12 @@ adt ask "your question" --repo . --agent project_agent
 
 Valid values: `repo_agent`, `research_agent`, `project_agent`.
 
+## Config file (`~/.adt/config.toml`)
+
+The `[adt]` table can set: `default_model`, `log_level`, `cache_ttl_seconds`, `use_llm_routing`, `routing_model`, `max_tool_iterations`, `token_budget`, `agent_chain` (list of agent ids), and `custom_tools` (reserved list for future plugin paths). Use `adt config show|set|path`. `ADT_*` env vars override file values when set.
+
+When **`agent_chain`** is non-empty and **`--agent`** is not passed, the runner executes each listed agent in order and merges answers (routing is skipped for that `ask`).
+
 ## MCP context (Phase 5)
 
 When the runner builds repository context for `repo_agent` (and related paths), it:
@@ -36,9 +45,9 @@ When the runner builds repository context for `repo_agent` (and related paths), 
 
 **Purpose:** Understand a local checkout (layout, files, symbols).
 
-**Tools:** `read_repo_tree`, `read_file`, `search_code`.
+**Tools:** `read_repo_tree`, `read_file`, `search_code`, `compare_repos`.
 
-**Context:** Repository-derived context from `repo_path`.
+**Context:** Repository-derived context from `repo_path` and any `additional_repo_paths`; multi-root sessions pack **labeled** blocks (`[context:repo label=r0 …]`).
 
 ## `research_agent`
 

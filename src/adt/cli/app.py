@@ -13,11 +13,19 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from adt.bootstrap import build_runner
+from adt.config import (
+    adt_config_path,
+    apply_env_overrides,
+    load_config_file,
+    update_config_key,
+)
 from adt.logging.json_log import setup_adt_file_logging
 from adt.models.schemas import QueryRequest
-from adt.repo_spec import resolve_repo_target
+from adt.repo_spec import resolve_repo_targets
 
 app = typer.Typer(help="Agentic Dev Tool CLI", add_completion=False)
+config_app = typer.Typer(help="View or edit ~/.adt/config.toml", add_completion=False)
+app.add_typer(config_app, name="config")
 console = Console()
 
 _VALID_AGENTS = frozenset({"repo_agent", "research_agent", "project_agent"})
@@ -28,11 +36,21 @@ def _version_string() -> str:
     try:
         return metadata.version("agentic-dev-tool")
     except metadata.PackageNotFoundError:
-        return "0.6.0-dev"
+        return "0.7.0-dev"
 
 
 def _format_ask_panel(agent_name: str, answer: str) -> None:
     """Print the model answer with formatting tuned for the routed agent."""
+    if agent_name.startswith("chain:"):
+        console.print(
+            Panel(
+                Markdown(answer),
+                title="Answer",
+                border_style="yellow",
+                title_align="left",
+            ),
+        )
+        return
     if agent_name == "research_agent":
         console.print(
             Panel(
@@ -66,10 +84,42 @@ def version_cmd() -> None:
 def info_cmd() -> None:
     """Print short project status and feature summary."""
     typer.echo(
-        "adt — Phase 5. ask: MCP hardening (tiktoken budgets, ranked repo context, "
-        "tree cache under ~/.adt/cache, JSON logs under ~/.adt/logs). "
-        "Flags: --log-level, --no-cache.",
+        "adt — Phase 6. ask: multi-repo --repo, compare_repos, LLM routing with "
+        "rule fallback, ~/.adt/config.toml (adt config show|set|path), optional "
+        "agent_chain. See docs/agents.md.",
     )
+
+
+@config_app.command("path")
+def config_path_cmd() -> None:
+    """Print the config file path."""
+    typer.echo(str(adt_config_path()))
+
+
+@config_app.command("show")
+def config_show_cmd() -> None:
+    """Print effective settings (file + ADT_* env overrides)."""
+    cfg = apply_env_overrides(load_config_file())
+    typer.echo(f"# effective (after env): {adt_config_path()}")
+    for k, v in cfg.to_toml_table().items():
+        typer.echo(f"{k} = {v!r}")
+
+
+@config_app.command("set")
+def config_set_cmd(
+    key: Annotated[str, typer.Argument(help="Setting name (e.g. default_model).")],
+    value: Annotated[
+        str,
+        typer.Argument(help="New value (comma-list for agent_chain)."),
+    ],
+) -> None:
+    """Persist one key under [adt] in config.toml."""
+    try:
+        update_config_key(None, key, value)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo("Saved.")
 
 
 @app.command("ask")
@@ -81,16 +131,15 @@ def ask_cmd(
         ),
     ],
     repo: Annotated[
-        str,
+        list[str] | None,
         typer.Option(
             "--repo",
             "-r",
             help=(
-                "Local directory or GitHub slug owner/repo (markdown root uses cwd "
-                "when slug is used)."
+                "Local directory or owner/repo slug; repeat for multiple checkouts."
             ),
         ),
-    ] = ".",
+    ] = None,
     token: Annotated[
         str | None,
         typer.Option(
@@ -105,7 +154,7 @@ def ask_cmd(
             "-a",
             help=(
                 "Force a specific agent: repo_agent, research_agent, or project_agent "
-                "(skips supervisor routing)."
+                "(skips supervisor routing and agent_chain)."
             ),
         ),
     ] = None,
@@ -114,12 +163,12 @@ def ask_cmd(
         typer.Option("--verbose", "-v", help="Print debug logs and token usage."),
     ] = False,
     log_level: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--log-level",
-            help="File log level: DEBUG, INFO, WARNING, ERROR (default INFO).",
+            help="File log level: DEBUG, INFO, WARNING, ERROR (default: config).",
         ),
-    ] = "INFO",
+    ] = None,
     no_cache: Annotated[
         bool,
         typer.Option(
@@ -128,13 +177,13 @@ def ask_cmd(
         ),
     ] = False,
     model: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--model",
             "-m",
-            help="OpenAI chat model name (default: gpt-4o-mini).",
+            help="OpenAI chat model (default: config default_model).",
         ),
-    ] = "gpt-4o-mini",
+    ] = None,
 ) -> None:
     """Ask a question: supervisor picks an agent unless ``--agent`` is set."""
     api_key = os.environ.get("OPENAI_API_KEY")
@@ -152,12 +201,22 @@ def ask_cmd(
         )
         raise typer.Exit(code=1)
 
+    cfg = apply_env_overrides(load_config_file())
+    eff_model = model if model is not None else cfg.default_model
+    eff_log = (log_level or cfg.log_level).upper()
+
+    repo_list = list(repo) if repo else ["."]
     try:
-        target = resolve_repo_target(repo)
+        resolved = resolve_repo_targets(repo_list)
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
-    lvl = getattr(logging, log_level.upper(), logging.INFO)
+    primary_path = resolved.roots[resolved.primary_key]
+    extra_paths = [
+        str(p) for k, p in resolved.roots.items() if k != resolved.primary_key
+    ]
+
+    lvl = getattr(logging, eff_log, logging.INFO)
     if verbose:
         lvl = logging.DEBUG
     setup_adt_file_logging(level=lvl)
@@ -168,21 +227,31 @@ def ask_cmd(
         env_gh = os.environ.get("GITHUB_TOKEN")
         github_token = env_gh.strip() if env_gh else None
 
+    chain = cfg.agent_chain if cfg.agent_chain else None
     runner = build_runner(
-        target.local_root,
-        model=model,
+        resolved.roots,
+        markdown_root=primary_path,
+        primary_repo_key=resolved.primary_key,
+        model=eff_model,
         api_key=api_key,
         github_token=github_token,
         use_context_cache=not no_cache,
+        context_cache_ttl=cfg.cache_ttl_seconds,
+        token_budget_total=cfg.token_budget,
+        use_llm_routing=cfg.use_llm_routing,
+        routing_model=cfg.routing_model,
+        agent_chain=chain,
+        max_tool_iterations=cfg.max_tool_iterations,
     )
     opts: dict[str, Any] = {}
     if no_cache:
         opts["no_cache"] = True
     request = QueryRequest(
         query=query,
-        repo_path=str(target.local_root),
-        github_owner=target.github_owner,
-        github_repo=target.github_repo,
+        repo_path=str(primary_path),
+        additional_repo_paths=extra_paths,
+        github_owner=resolved.github_owner,
+        github_repo=resolved.github_repo,
         force_agent=agent,
         options=opts,
     )

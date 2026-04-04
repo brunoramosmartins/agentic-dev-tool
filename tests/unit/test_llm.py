@@ -46,6 +46,24 @@ def test_chat_parses_tool_calls() -> None:
     assert out.tool_calls[0].arguments == {"message": "z"}
 
 
+def test_complete_json_object() -> None:
+    client = MagicMock()
+    client.chat.completions.create.return_value = MagicMock(
+        choices=[_choice('{"agent":"repo_agent"}')],
+        usage=MagicMock(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+    )
+    llm = LLMClient(client=client)
+    data = llm.complete_json_object(
+        system="s",
+        user="u",
+        model="m",
+        max_completion_tokens=50,
+    )
+    assert data.get("agent") == "repo_agent"
+    call_kw = client.chat.completions.create.call_args[1]
+    assert call_kw.get("response_format") == {"type": "json_object"}
+
+
 def test_chat_retries_on_429(monkeypatch: pytest.MonkeyPatch) -> None:
     client = MagicMock()
     sleeps: list[float] = []

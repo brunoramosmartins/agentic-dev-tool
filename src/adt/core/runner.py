@@ -6,6 +6,7 @@ import json
 import logging
 import time
 from collections.abc import Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from adt.agents.base import BaseAgent
@@ -23,6 +24,7 @@ from adt.models.schemas import (
 )
 
 if TYPE_CHECKING:
+    from adt.core.hybrid_supervisor import HybridSupervisor
     from adt.core.supervisor import Supervisor
 
 logger = logging.getLogger(__name__)
@@ -45,7 +47,7 @@ class Runner:
 
     def __init__(
         self,
-        supervisor: Supervisor,
+        supervisor: Supervisor | HybridSupervisor,
         llm: LLMBackend,
         context_builder: ContextBuilder,
         executor: ExecutionController,
@@ -53,6 +55,8 @@ class Runner:
         agents: dict[str, BaseAgent],
         *,
         max_tool_iterations: int = 5,
+        repo_roots: dict[str, Path] | None = None,
+        agent_chain: list[str] | None = None,
     ) -> None:
         self._supervisor = supervisor
         self._llm = llm
@@ -61,6 +65,8 @@ class Runner:
         self._registry = registry
         self._agents = agents
         self._max_tool_iterations = max_tool_iterations
+        self._repo_roots: dict[str, Path] = dict(repo_roots or {})
+        self._agent_chain: list[str] = list(agent_chain or [])
         self.last_budget_report: dict[str, Any] = {}
 
     @property
@@ -73,9 +79,9 @@ class Runner:
 
     def run(self, request: QueryRequest) -> AgentResponse:
         """Route the query, build context, run the LLM/tool loop, return an answer."""
-        t0 = time.perf_counter()
-        self.last_budget_report = {}
         use_cache = not bool(request.options.get("no_cache", False))
+        if self._agent_chain and request.force_agent is None:
+            return self._run_agent_chain(request, use_cache=use_cache)
 
         if request.force_agent is not None:
             if request.force_agent not in self._agents:
@@ -92,9 +98,56 @@ class Runner:
             routed = RoutedRequest(agent_name=request.force_agent, request=enriched)
         else:
             routed = self._supervisor.route(request)
-        agent = self._agents[routed.agent_name]
+        return self._execute_routed(routed, use_cache=use_cache)
 
+    def _run_agent_chain(
+        self,
+        request: QueryRequest,
+        *,
+        use_cache: bool,
+    ) -> AgentResponse:
+        """Run configured agents sequentially and merge answers."""
+        chunks: list[str] = []
+        tools_all: list[str] = []
+        summaries: list[str] = []
+        chain_label = ",".join(self._agent_chain)
+        for name in self._agent_chain:
+            if name not in self._agents:
+                return AgentResponse(
+                    answer=f"Unknown agent in agent_chain: {name!r}.",
+                    tools_used=[],
+                    context_summary="",
+                    routed_agent=f"chain:{chain_label}",
+                )
+            sub = request.model_copy(deep=True)
+            sub.force_agent = name
+            sub.options = {**sub.options, "route": "chain"}
+            routed = RoutedRequest(agent_name=name, request=sub)
+            resp = self._execute_routed(routed, use_cache=use_cache)
+            chunks.append(f"### {name}\n{resp.answer}")
+            tools_all.extend(resp.tools_used)
+            if resp.context_summary:
+                summaries.append(resp.context_summary)
+        return AgentResponse(
+            answer="\n\n".join(chunks),
+            tools_used=tools_all,
+            context_summary=(summaries[0][:400] if summaries else ""),
+            routed_agent=f"chain:{chain_label}",
+        )
+
+    def _execute_routed(
+        self,
+        routed: RoutedRequest,
+        *,
+        use_cache: bool,
+    ) -> AgentResponse:
+        """Build context and run the tool loop for one routed agent."""
+        t0 = time.perf_counter()
+        self.last_budget_report = {}
+        agent = self._agents[routed.agent_name]
         req = routed.request
+        multi = len(self._repo_roots) > 1
+
         if routed.agent_name == "research_agent":
             raw_context = self._context.build_from_text("")
         elif routed.agent_name == "project_agent":
@@ -105,29 +158,47 @@ class Runner:
                     "Use these owner and repo values in read_issues and "
                     "read_milestones unless the user specifies another repository."
                 )
-            if req.repo_path:
+            paths = req.effective_repo_paths()
+            if paths:
                 parts.append(
                     "Local markdown root for read_markdown (relative paths): "
-                    f"{req.repo_path}"
+                    f"{paths[0]}"
                 )
+            if len(paths) > 1:
+                parts.append("Additional repository roots: " + ", ".join(paths[1:]))
             meta = "\n".join(parts)
             if req.github_owner and req.github_repo:
                 raw_context = self._context.build_from_text(meta)
-            elif req.repo_path:
-                repo_blob = self._context.build_from_repo(
-                    req.repo_path,
-                    query=req.query,
-                    use_cache=use_cache,
-                )
+            elif paths:
+                if multi:
+                    repo_blob = self._context.build_from_repos(
+                        self._repo_roots,
+                        query=req.query,
+                        use_cache=use_cache,
+                    )
+                else:
+                    repo_blob = self._context.build_from_repo(
+                        paths[0],
+                        query=req.query,
+                        use_cache=use_cache,
+                    )
                 raw_context = f"{meta}\n\n{repo_blob}" if meta else repo_blob
             else:
                 raw_context = self._context.build_from_text(meta)
-        elif req.repo_path:
-            raw_context = self._context.build_from_repo(
-                req.repo_path,
-                query=req.query,
-                use_cache=use_cache,
-            )
+        elif req.effective_repo_paths():
+            paths = req.effective_repo_paths()
+            if multi:
+                raw_context = self._context.build_from_repos(
+                    self._repo_roots,
+                    query=req.query,
+                    use_cache=use_cache,
+                )
+            else:
+                raw_context = self._context.build_from_repo(
+                    paths[0],
+                    query=req.query,
+                    use_cache=use_cache,
+                )
         else:
             raw_context = self._context.build_from_text("")
 

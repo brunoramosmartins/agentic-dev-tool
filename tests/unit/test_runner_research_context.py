@@ -32,6 +32,7 @@ class SpyContext(ContextBuilder):
         max_chars_per_file: int = 4000,
         max_context_tokens: int | None = None,
         use_cache: bool = True,
+        source_label: str | None = None,
     ) -> str:
         """Increment repo counter and delegate to the base implementation."""
         self.repo_calls += 1
@@ -43,6 +44,7 @@ class SpyContext(ContextBuilder):
             max_chars_per_file=max_chars_per_file,
             max_context_tokens=max_context_tokens,
             use_cache=use_cache,
+            source_label=source_label,
         )
 
     def build_from_text(self, text: str, *, max_tokens: int | None = None) -> str:

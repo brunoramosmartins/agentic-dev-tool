@@ -3,44 +3,91 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from adt.agents.base import BaseAgent
 from adt.agents.project_agent import ProjectAgent
 from adt.agents.repo_agent import RepoAgent
 from adt.agents.research_agent import ResearchAgent
+from adt.core.hybrid_supervisor import HybridSupervisor
 from adt.core.llm import LLMClient
 from adt.core.runner import Runner
-from adt.core.supervisor import Supervisor
 from adt.mcp.context import ContextBuilder, default_cache_ttl
 from adt.mcp.executor import ExecutionController
 from adt.mcp.registry import ToolDefinition, ToolRegistry
+from adt.tools import compare as compare_tools
 from adt.tools import project as project_tools
 from adt.tools import repo as repo_tools
 from adt.tools import research as research_tools
 
 
-def register_repo_tools(registry: ToolRegistry, repo_root: Path) -> None:
-    """Register repo tools (tree, file read, search) scoped to ``repo_root``.
-
-    Handlers resolve paths strictly under ``repo_root`` to avoid path traversal.
+def register_repo_tools(
+    registry: ToolRegistry,
+    repo_roots: dict[str, Path],
+    *,
+    primary_repo_key: str | None = None,
+) -> None:
+    """Register repo tools scoped to one or more roots keyed by ``repo_key``.
 
     Args:
-        registry: Empty or partially filled tool registry (must not already define
-            these three names).
-        repo_root: Filesystem root passed to ``--repo`` for the current run.
+        registry: Registry without conflicting tool names.
+        repo_roots: Map of session ids (e.g. ``r0``) to repository roots.
+        primary_repo_key: Default ``repo_key`` when the model omits it.
     """
-    root = repo_root.resolve()
+    roots = {k: v.resolve() for k, v in repo_roots.items()}
+    if not roots:
+        msg = "repo_roots must not be empty"
+        raise ValueError(msg)
+    keys = list(roots.keys())
+    default_key = (
+        primary_repo_key
+        if primary_repo_key is not None and primary_repo_key in roots
+        else keys[0]
+    )
+    key_list = ", ".join(keys)
 
-    def read_repo_tree(path: str = ".", max_depth: int = 3) -> str:
-        """Delegate to :func:`adt.tools.repo.read_repo_tree` with a fixed root."""
+    def _root(repo_key: str) -> Path:
+        k = repo_key.strip() if repo_key else default_key
+        if k not in roots:
+            msg = f"unknown repo_key {k!r} (known: {key_list})"
+            raise ValueError(msg)
+        return roots[k]
+
+    def read_repo_tree(
+        repo_key: str | None = None,
+        path: str = ".",
+        max_depth: int = 3,
+    ) -> str:
+        """Tree listing for the chosen repository session id."""
+        try:
+            root = _root(repo_key or default_key)
+        except ValueError as exc:
+            return f"error: {exc}"
         return repo_tools.read_repo_tree(root, path=path, max_depth=max_depth)
 
-    def read_file(path: str, max_lines: int = 200) -> str:
-        """Delegate to :func:`adt.tools.repo.read_file` with a fixed root."""
+    def read_file(
+        path: str,
+        repo_key: str | None = None,
+        max_lines: int = 200,
+    ) -> str:
+        """Read a file under the chosen repository root."""
+        try:
+            root = _root(repo_key or default_key)
+        except ValueError as exc:
+            return f"error: {exc}"
         return repo_tools.read_file(root, path, max_lines=max_lines)
 
-    def search_code(pattern: str, path: str = ".", max_results: int = 20) -> str:
-        """Delegate to :func:`adt.tools.repo.search_code` with a fixed root."""
+    def search_code(
+        pattern: str,
+        path: str = ".",
+        repo_key: str | None = None,
+        max_results: int = 20,
+    ) -> str:
+        """Search under the chosen repository root."""
+        try:
+            root = _root(repo_key or default_key)
+        except ValueError as exc:
+            return f"error: {exc}"
         return repo_tools.search_code(
             root,
             path,
@@ -48,16 +95,30 @@ def register_repo_tools(registry: ToolRegistry, repo_root: Path) -> None:
             max_results=max_results,
         )
 
+    def compare_repos(repo_a: str, repo_b: str) -> str:
+        """Structured diff between two registered repository keys."""
+        return compare_tools.compare_repos(roots, repo_a.strip(), repo_b.strip())
+
+    repo_key_prop: dict[str, Any] = {
+        "type": "string",
+        "description": (
+            f"Repository session id ({key_list}). Defaults to {default_key!r}."
+        ),
+        "enum": keys,
+    }
+
     registry.register(
         ToolDefinition(
             name="read_repo_tree",
             description=(
                 "Return a text tree of files and directories under a path, "
-                "respecting .gitignore and skipping common build/venv folders."
+                "respecting .gitignore and skipping common build/venv folders. "
+                f"Session repos: {key_list}."
             ),
             parameters={
                 "type": "object",
                 "properties": {
+                    "repo_key": repo_key_prop,
                     "path": {
                         "type": "string",
                         "description": "Directory relative to repo root (default '.').",
@@ -85,6 +146,7 @@ def register_repo_tools(registry: ToolRegistry, repo_root: Path) -> None:
             parameters={
                 "type": "object",
                 "properties": {
+                    "repo_key": repo_key_prop,
                     "path": {
                         "type": "string",
                         "description": "File path relative to repository root.",
@@ -113,6 +175,7 @@ def register_repo_tools(registry: ToolRegistry, repo_root: Path) -> None:
             parameters={
                 "type": "object",
                 "properties": {
+                    "repo_key": repo_key_prop,
                     "path": {
                         "type": "string",
                         "description": "Directory relative to repo root (default '.').",
@@ -133,6 +196,34 @@ def register_repo_tools(registry: ToolRegistry, repo_root: Path) -> None:
             },
             allowed_agents=["repo_agent"],
             handler=search_code,
+        ),
+    )
+    registry.register(
+        ToolDefinition(
+            name="compare_repos",
+            description=(
+                "Compare two registered local repositories: file sets, overlap, "
+                f"and key manifest files. Valid keys: {key_list}."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "repo_a": {
+                        "type": "string",
+                        "description": "First repo_key.",
+                        "enum": keys,
+                    },
+                    "repo_b": {
+                        "type": "string",
+                        "description": "Second repo_key.",
+                        "enum": keys,
+                    },
+                },
+                "required": ["repo_a", "repo_b"],
+                "additionalProperties": False,
+            },
+            allowed_agents=["repo_agent"],
+            handler=compare_repos,
         ),
     )
 
@@ -364,8 +455,10 @@ def register_project_tools(
 
 
 def build_runner(
-    local_root: Path,
+    repo_roots: Path | dict[str, Path],
     *,
+    markdown_root: Path | None = None,
+    primary_repo_key: str | None = None,
     model: str = "gpt-4o-mini",
     api_key: str | None = None,
     github_token: str | None = None,
@@ -373,11 +466,16 @@ def build_runner(
     use_context_cache: bool = True,
     context_cache_ttl: float | None = None,
     token_budget_total: int | None = None,
+    use_llm_routing: bool = True,
+    routing_model: str | None = None,
+    agent_chain: list[str] | None = None,
 ) -> Runner:
     """Construct a :class:`~adt.core.runner.Runner` for the full agent/tool set.
 
     Args:
-        local_root: Directory for repo tools and project_agent markdown reads.
+        repo_roots: Single path or map of session ids (``r0``, …) to repo roots.
+        markdown_root: Base for ``read_markdown`` (defaults to primary repo root).
+        primary_repo_key: Default repo id for tools (defaults to first key).
         model: OpenAI chat model name.
         api_key: Optional API key (falls back to ``OPENAI_API_KEY`` in the client).
         github_token: Optional token forwarded to GitHub REST tools.
@@ -385,17 +483,37 @@ def build_runner(
         use_context_cache: When True, cache repository tree listings on disk.
         context_cache_ttl: Override tree cache TTL (seconds).
         token_budget_total: Override logical token window for context budgeting.
+        use_llm_routing: When True, classify intent with a small JSON LLM call first.
+        routing_model: Model name for routing (defaults to ``model``).
+        agent_chain: When non-empty and ``force_agent`` is unset, run this sequence.
 
     Returns:
         A runner with repo, research, and project tools registered.
     """
+    if isinstance(repo_roots, Path):
+        roots_map: dict[str, Path] = {"r0": repo_roots.resolve()}
+        pk = "r0"
+    else:
+        roots_map = {k: v.resolve() for k, v in repo_roots.items()}
+        if not roots_map:
+            msg = "repo_roots mapping must not be empty"
+            raise ValueError(msg)
+        if primary_repo_key is not None and primary_repo_key in roots_map:
+            pk = primary_repo_key
+        else:
+            pk = next(iter(roots_map))
+    md = markdown_root.resolve() if markdown_root is not None else roots_map[pk]
+
     registry = ToolRegistry()
-    root = local_root.resolve()
-    register_repo_tools(registry, root)
+    register_repo_tools(registry, roots_map, primary_repo_key=pk)
     register_research_tools(registry)
-    register_project_tools(registry, root, token=github_token)
-    supervisor = Supervisor()
+    register_project_tools(registry, md, token=github_token)
     llm = LLMClient(model=model, api_key=api_key)
+    supervisor = HybridSupervisor(
+        llm=llm,
+        use_llm_routing=use_llm_routing,
+        routing_model=routing_model,
+    )
     ttl = context_cache_ttl if context_cache_ttl is not None else default_cache_ttl()
     context = ContextBuilder(
         tiktoken_model=model,
@@ -417,6 +535,8 @@ def build_runner(
         registry,
         agents,
         max_tool_iterations=max_tool_iterations,
+        repo_roots=roots_map,
+        agent_chain=list(agent_chain or []),
     )
 
 
@@ -430,6 +550,9 @@ def build_runner_for_repo(
     use_context_cache: bool = True,
     context_cache_ttl: float | None = None,
     token_budget_total: int | None = None,
+    use_llm_routing: bool = True,
+    routing_model: str | None = None,
+    agent_chain: list[str] | None = None,
 ) -> Runner:
     """Backward-compatible alias for :func:`build_runner` with a repository path."""
     return build_runner(
@@ -441,4 +564,7 @@ def build_runner_for_repo(
         use_context_cache=use_context_cache,
         context_cache_ttl=context_cache_ttl,
         token_budget_total=token_budget_total,
+        use_llm_routing=use_llm_routing,
+        routing_model=routing_model,
+        agent_chain=agent_chain,
     )

@@ -9,7 +9,12 @@ from adt.models.schemas import QueryRequest
 def test_repo_agent_tools_and_prompt() -> None:
     """Declared tools and prompt should match the MVP contract."""
     agent = RepoAgent()
-    assert agent.tools == ["read_repo_tree", "read_file", "search_code"]
+    assert agent.tools == [
+        "read_repo_tree",
+        "read_file",
+        "search_code",
+        "compare_repos",
+    ]
     assert "senior software engineer" in agent.system_prompt.lower()
 
 

@@ -8,7 +8,7 @@ A context-oriented AI assistant CLI built with a simplified Model Context Protoc
 
 ## Status
 
-**Phase 5 — MCP hardening:** Context packing uses **tiktoken** budgets (20/50/10/20 split for system/context/tools/response), **ranked** file selection from the user query, and a **disk cache** for repo tree listings under `~/.adt/cache` (keyed by path + `git rev-parse HEAD`, TTL configurable). **JSON logs** append to `~/.adt/logs/adt.jsonl` (`--log-level`). **`Phase 4`** still applies: local/`owner/repo` `--repo`, GitHub project tools, `GITHUB_TOKEN` / `--token`. See [docs/agents.md](docs/agents.md).
+**Phase 6 — Advanced features:** Repeat **`--repo`** for **multi-repo** sessions (`r0`, `r1`, …); repo tools take optional **`repo_key`**; **`compare_repos`** diffs two roots. **LLM-based routing** (JSON classify, then keyword fallback) via config; **`~/.adt/config.toml`** holds defaults (`adt config show|set|path`). Optional **`agent_chain`** runs several agents in one `ask`. **Phase 5** still applies (tiktoken budgets, tree cache, JSON logs). See [docs/agents.md](docs/agents.md).
 
 ## Installation
 
@@ -38,6 +38,8 @@ cp .env.example .env
 
 `adt` reads `OPENAI_API_KEY` from the process environment. Load `.env` with your shell or a tool such as [direnv](https://direnv.net/) if you use one.
 
+Persistent CLI defaults live in **`~/.adt/config.toml`** (see `adt config show`). Environment variables override file values when set.
+
 ### Environment variables
 
 | Variable | Required | Description |
@@ -47,6 +49,11 @@ cp .env.example .env
 | `ADT_LIVE_MODEL` | No | Optional model override for `pytest -m live` (default `gpt-4o-mini`). |
 | `ADT_TOKEN_BUDGET` | No | Logical token window for one `ask` turn (default `16384`). |
 | `ADT_CACHE_TTL` | No | Repo tree cache TTL in seconds (default `300`). |
+| `ADT_DEFAULT_MODEL` | No | Overrides `[adt] default_model` in config. |
+| `ADT_LOG_LEVEL` | No | Overrides config log level for file logging. |
+| `ADT_USE_LLM_ROUTING` | No | `0`/`1` — disable or enable LLM intent routing. |
+| `ADT_ROUTING_MODEL` | No | Model name for the routing JSON call. |
+| `ADT_MAX_TOOL_ITERATIONS` | No | Max LLM/tool rounds per agent step. |
 
 ## Usage
 
@@ -55,6 +62,14 @@ cp .env.example .env
 ```bash
 adt ask "What does this project do?" --repo .
 ```
+
+### Multi-repository (e.g. fork vs upstream)
+
+```bash
+adt ask "Compare dependency files in these two trees" --repo ./my-fork --repo ../upstream
+```
+
+Each checkout gets a session id (`r0`, `r1`, …). Tools default to `r0` unless you pass **`repo_key`**. Use **`compare_repos`** for a structured tree/manifest diff.
 
 ### GitHub project (`owner/repo`)
 
@@ -83,19 +98,21 @@ adt ask "List issues" --repo myorg/repo --agent project_agent
 
 ### Options
 
-- `--repo`, `-r` — **Local directory** (must exist) **or** **`owner/repo`** GitHub slug. Slug form uses `cwd` as the markdown root.
+- `--repo`, `-r` — Repeatable. **Local directory** (must exist) **or** **`owner/repo`** slug. Slug form uses `cwd` as the markdown root for the first slug.
 - `--token` — GitHub PAT for this run (overrides `GITHUB_TOKEN` when set).
-- `--agent`, `-a` — `repo_agent`, `research_agent`, or `project_agent`.
+- `--agent`, `-a` — `repo_agent`, `research_agent`, or `project_agent` (skips routing and **`agent_chain`**).
 - `--verbose`, `-v` — debug logging, last token usage, estimated token budget, and a truncated context summary.
-- `--log-level` — `DEBUG`, `INFO`, `WARNING`, or `ERROR` for JSON file logging (default `INFO`; `--verbose` forces `DEBUG`).
+- `--log-level` — `DEBUG`, `INFO`, `WARNING`, or `ERROR` for JSON file logging (default from config; `--verbose` forces `DEBUG`).
 - `--no-cache` — skip reading/writing the repo tree cache for this run.
-- `--model`, `-m` — OpenAI model name (default: `gpt-4o-mini`).
+- `--model`, `-m` — OpenAI model (default from **`~/.adt/config.toml`** or `gpt-4o-mini`).
 
 Other commands:
 
 ```bash
 adt --help
 adt ask --help
+adt config show
+adt config set default_model gpt-4o-mini
 adt version
 adt info
 ```

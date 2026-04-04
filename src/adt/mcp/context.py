@@ -134,6 +134,7 @@ class ContextBuilder:
         max_chars_per_file: int = 4000,
         max_context_tokens: int | None = None,
         use_cache: bool = True,
+        source_label: str | None = None,
     ) -> str:
         """Walk a repository: ranked files plus tree listing within token budget.
 
@@ -146,6 +147,7 @@ class ContextBuilder:
             max_context_tokens: Hard cap on returned context tokens (defaults to
                 50%% of :attr:`_total_budget`).
             use_cache: When False, skip reading/writing the tree line cache.
+            source_label: Optional stable id (e.g. ``r0``) for multi-repo context.
         """
         root = Path(path).resolve()
         if not root.is_dir():
@@ -168,7 +170,10 @@ class ContextBuilder:
         else:
             tree_lines = walk_tree()
 
-        lines: list[str] = [f"[context:repo path={root}]"]
+        if source_label:
+            lines = [f"[context:repo label={source_label} path={root}]"]
+        else:
+            lines = [f"[context:repo path={root}]"]
         lines.append("[tree]")
         lines.extend(tree_lines)
         lines.append("[/tree]")
@@ -203,6 +208,31 @@ class ContextBuilder:
         if count_tokens(body, self._enc) > ctx_budget:
             body = self.trim_context(body, ctx_budget)
         return body
+
+    def build_from_repos(
+        self,
+        roots: dict[str, Path],
+        *,
+        query: str | None = None,
+        use_cache: bool = True,
+    ) -> str:
+        """Build labeled context blocks for several repository roots within budget."""
+        if not roots:
+            return self.build_from_text("")
+        n = max(1, len(roots))
+        per = max(512, int(self._total_budget * 0.50 // n))
+        parts: list[str] = []
+        for label, path in roots.items():
+            parts.append(
+                self.build_from_repo(
+                    str(path),
+                    query=query,
+                    use_cache=use_cache,
+                    max_context_tokens=per,
+                    source_label=label,
+                ),
+            )
+        return "\n\n".join(parts)
 
     def _walk_tree(self, root: Path, *, max_depth: int) -> list[str]:
         lines: list[str] = []

@@ -18,9 +18,13 @@ class QueryRequest(BaseModel):
     repo_path: str | None = Field(
         default=None,
         description=(
-            "Local directory: repository root for repo tools and markdown root "
-            "for project_agent."
+            "Primary local directory: first repository root and default markdown "
+            "root for project_agent."
         ),
+    )
+    additional_repo_paths: list[str] = Field(
+        default_factory=list,
+        description="Extra local repository roots (multi-repo sessions).",
     )
     github_owner: str | None = Field(
         default=None,
@@ -51,6 +55,16 @@ class QueryRequest(BaseModel):
             msg = "github_owner and github_repo must both be set or both omitted."
             raise ValueError(msg)
         return self
+
+    def effective_repo_paths(self) -> list[str]:
+        """Return unique local roots in order (primary ``repo_path`` first)."""
+        out: list[str] = []
+        if self.repo_path:
+            out.append(self.repo_path)
+        for p in self.additional_repo_paths:
+            if p and p not in out:
+                out.append(p)
+        return out
 
 
 class ToolCall(BaseModel):

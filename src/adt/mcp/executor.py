@@ -11,6 +11,7 @@ from typing import Any
 import jsonschema
 from jsonschema import ValidationError
 
+from adt.logging.json_log import log_adt
 from adt.mcp.registry import ToolRegistry
 from adt.models.schemas import ToolCall, ToolResult
 
@@ -131,4 +132,4 @@ class ExecutionController:
         }
         if error is not None:
             payload["error"] = error
-        logger.info("", extra={"adt": payload})
+        log_adt(logger, logging.INFO, **payload)

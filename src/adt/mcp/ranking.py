@@ -79,6 +79,11 @@ def _type_tier(path: Path) -> int:
     return _TYPE_TIERS.get(suf, 20)
 
 
+_KEYWORD_MATCH_BONUS = 12.0
+_MAX_TYPE_TIER_BONUS = 25.0
+_FILE_SIZE_BONUS = 15.0
+
+
 def score_candidate_file(path: Path, root: Path, keywords: frozenset[str]) -> float:
     """Score a text file for inclusion in ranked context (higher is better).
 
@@ -99,14 +104,14 @@ def score_candidate_file(path: Path, root: Path, keywords: frozenset[str]) -> fl
     score = 0.0
     for kw in keywords:
         if kw in name_l or kw in rel_s:
-            score += 12.0
+            score += _KEYWORD_MATCH_BONUS
     tier = _type_tier(path)
-    score += max(0.0, 25.0 - float(tier))
+    score += max(0.0, _MAX_TYPE_TIER_BONUS - float(tier))
     try:
         kb = path.stat().st_size / 1024.0
     except OSError:
         kb = 1024.0
-    score += 15.0 / (1.0 + kb)
+    score += _FILE_SIZE_BONUS / (1.0 + kb)
     return score
 
 

@@ -14,22 +14,8 @@ from adt.mcp.tokens import (
     trim_context,
     truncate_head_tail,
 )
+from adt.tools._paths import SKIP_DIR_NAMES as _SKIP_DIR_NAMES
 
-_SKIP_DIR_NAMES = {
-    ".git",
-    ".hg",
-    ".svn",
-    "__pycache__",
-    ".venv",
-    "venv",
-    "node_modules",
-    ".mypy_cache",
-    ".ruff_cache",
-    ".pytest_cache",
-    "dist",
-    "build",
-    ".eggs",
-}
 _TEXT_SUFFIXES = {
     ".py",
     ".md",

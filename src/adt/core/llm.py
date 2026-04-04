@@ -10,6 +10,7 @@ from typing import Any
 
 from openai import APIStatusError, OpenAI
 
+from adt.logging.json_log import log_adt
 from adt.models.schemas import LLMMessage, ToolCall
 
 logger = logging.getLogger(__name__)
@@ -126,10 +127,7 @@ class LLMClient:
                         "completion_tokens": usage.completion_tokens,
                         "total_tokens": usage.total_tokens,
                     }
-                    logger.info(
-                        "",
-                        extra={"adt": {"event": "llm_usage", **self._last_usage}},
-                    )
+                    log_adt(logger, logging.INFO, event="llm_usage", **self._last_usage)
                 tool_calls = _tool_calls_from_openai(choice.tool_calls)
                 return LLMMessage(
                     role="assistant",

@@ -7,22 +7,12 @@ from pathlib import Path
 
 import httpx
 
+from adt.tools._paths import safe_resolve_under as _safe_resolve_under
+
 _GITHUB_API = "https://api.github.com"
 _DEFAULT_TIMEOUT = 30.0
 _MAX_ISSUES_CAP = 100
 _MAX_MILESTONES_CAP = 50
-
-
-def _safe_resolve_under(root: Path, relative: str) -> Path:
-    """Resolve ``relative`` under ``root``; raise ``ValueError`` on escape attempts."""
-    root = root.resolve()
-    candidate = (root / relative).resolve()
-    try:
-        candidate.relative_to(root)
-    except ValueError as exc:
-        msg = "Path escapes markdown root."
-        raise ValueError(msg) from exc
-    return candidate
 
 
 def _strip_optional_yaml_front_matter(text: str) -> str:

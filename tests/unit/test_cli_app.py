@@ -162,3 +162,125 @@ def test_cli_ask_rejects_invalid_agent(mock_build, tmp_path) -> None:
         )
     assert result.exit_code == 1
     mock_build.assert_not_called()
+
+
+@patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}, clear=False)
+@patch("adt.ask_session.build_runner")
+def test_cli_ask_verbose_shows_token_usage(mock_build, tmp_path) -> None:
+    mock_runner = MagicMock()
+    mock_runner.run.return_value = AgentResponse(
+        answer="verbose test",
+        tools_used=["read_repo_tree"],
+        context_summary="ctx summary",
+        routed_agent="repo_agent",
+    )
+    mock_runner.last_token_usage = {"total_tokens": 42}
+    mock_runner.last_budget_report = {"budget": 1000}
+    mock_build.return_value = mock_runner
+    repo = tmp_path / "r"
+    repo.mkdir()
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["ask", "test verbose", "--repo", str(repo), "--verbose"],
+    )
+    assert result.exit_code == 0
+    assert "42" in result.stdout or "token" in result.stdout.lower()
+
+
+@patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}, clear=False)
+@patch("adt.ask_session.build_runner")
+def test_cli_ask_chain_agent_formatting(mock_build, tmp_path) -> None:
+    mock_runner = MagicMock()
+    mock_runner.run.return_value = AgentResponse(
+        answer="chain result",
+        tools_used=[],
+        context_summary="",
+        routed_agent="chain:repo_agent+research_agent",
+    )
+    mock_build.return_value = mock_runner
+    repo = tmp_path / "r"
+    repo.mkdir()
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["ask", "chain test", "--repo", str(repo)],
+    )
+    assert result.exit_code == 0
+    assert "chain" in result.stdout.lower()
+
+
+@patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}, clear=False)
+@patch("adt.ask_session.build_runner")
+def test_cli_ask_research_agent_panel(mock_build, tmp_path) -> None:
+    mock_runner = MagicMock()
+    mock_runner.run.return_value = AgentResponse(
+        answer="research answer",
+        tools_used=["search_papers"],
+        context_summary="",
+        routed_agent="research_agent",
+    )
+    mock_build.return_value = mock_runner
+    repo = tmp_path / "r"
+    repo.mkdir()
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["ask", "papers on RAG", "--repo", str(repo)],
+    )
+    assert result.exit_code == 0
+
+
+@patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}, clear=False)
+@patch("adt.ask_session.build_runner")
+def test_cli_ask_project_agent_panel(mock_build, tmp_path) -> None:
+    mock_runner = MagicMock()
+    mock_runner.run.return_value = AgentResponse(
+        answer="project answer",
+        tools_used=["read_issues"],
+        context_summary="",
+        routed_agent="project_agent",
+    )
+    mock_build.return_value = mock_runner
+    repo = tmp_path / "r"
+    repo.mkdir()
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["ask", "open issues", "--repo", str(repo)],
+    )
+    assert result.exit_code == 0
+
+
+@patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}, clear=False)
+@patch("adt.cli.app.run_ask")
+def test_cli_ask_configuration_error(mock_run_ask, tmp_path) -> None:
+    from adt.ask_session import AskConfigurationError
+
+    mock_run_ask.side_effect = AskConfigurationError("bad config")
+    repo = tmp_path / "r"
+    repo.mkdir()
+    runner = CliRunner()
+    result = runner.invoke(app, ["ask", "test", "--repo", str(repo)])
+    assert result.exit_code == 1
+
+
+@patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}, clear=False)
+@patch("adt.cli.app.run_ask")
+def test_cli_ask_unexpected_exception(mock_run_ask, tmp_path) -> None:
+    mock_run_ask.side_effect = RuntimeError("kaboom")
+    repo = tmp_path / "r"
+    repo.mkdir()
+    runner = CliRunner()
+    result = runner.invoke(app, ["ask", "test", "--repo", str(repo)])
+    assert result.exit_code == 1
+
+
+def test_cli_config_set_unknown_key(tmp_path, monkeypatch) -> None:
+    from adt import config as cfgmod
+
+    p = tmp_path / "cfg.toml"
+    monkeypatch.setattr(cfgmod, "adt_config_path", lambda: p)
+    runner = CliRunner()
+    result = runner.invoke(app, ["config", "set", "unknown_key", "val"])
+    assert result.exit_code == 1

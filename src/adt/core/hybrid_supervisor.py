@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from adt.core.supervisor import Supervisor
+from adt.logging.json_log import log_adt
 from adt.models.schemas import QueryRequest, RoutedRequest
 
 if TYPE_CHECKING:
@@ -76,11 +77,7 @@ def _llm_classify_agent(
             max_completion_tokens=80,
         )
     except Exception as exc:
-        logger.info(
-            "llm routing failed, using rules: %s",
-            exc,
-            extra={"adt": {"event": "llm_route_fallback", "error": str(exc)}},
-        )
+        log_adt(logger, logging.INFO, event="llm_route_fallback", error=str(exc))
         return None
 
     agent = raw.get("agent") if isinstance(raw, dict) else None

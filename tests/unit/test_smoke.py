@@ -6,4 +6,4 @@ import adt
 
 
 def test_package_version() -> None:
-    assert adt.__version__ == "1.0.0"
+    assert adt.__version__ == "1.1.0"

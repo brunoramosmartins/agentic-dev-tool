@@ -4,6 +4,25 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.0] — 2026-04-04
+
+### Changed
+
+- **DRY:** Extracted `_safe_resolve_under()` and `SKIP_DIR_NAMES` into shared `tools/_paths.py` module.
+- **Logging:** Standardized structured logging via `log_adt()` helper across `hybrid_supervisor`, `llm`, and `executor` modules.
+- **Readability:** Named magic numbers in `mcp/ranking.py` with descriptive constants (`_KEYWORD_MATCH_BONUS`, `_MAX_TYPE_TIER_BONUS`, `_FILE_SIZE_BONUS`).
+- **Exports:** Added `__all__` to `agents/`, `mcp/`, and `tools/` subpackage `__init__.py` files.
+
+### Fixed
+
+- **User-Agent** header in `tools/research.py` now uses `__version__` dynamically instead of hardcoded `"0.4"`.
+
+### Added
+
+- **Tests:** 59 new unit tests covering config edge cases, CLI error paths, tool error handling, and token utilities.
+- **Coverage:** 79.6% → 85.3% (branch-aware).
+- **Docs:** Added `CLAUDE.md` with project setup instructions and architecture summary.
+
 ## [1.0.0] — 2026-04-03
 
 ### Added

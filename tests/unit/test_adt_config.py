@@ -74,6 +74,7 @@ def test_env_override_model(monkeypatch) -> None:
 
 # ── from_toml_table edge cases ──────────────────────────────────────
 
+
 def test_from_toml_table_invalid_cache_ttl() -> None:
     cfg = AdtConfig.from_toml_table({"cache_ttl_seconds": "not-a-number"})
     assert cfg.cache_ttl_seconds == 300.0
@@ -146,6 +147,7 @@ def test_from_toml_table_custom_tools_single() -> None:
 
 # ── apply_env_overrides edge cases ──────────────────────────────────
 
+
 def test_env_override_cache_ttl(monkeypatch) -> None:
     monkeypatch.setenv("ADT_CACHE_TTL", "600")
     cfg = apply_env_overrides(AdtConfig())
@@ -177,6 +179,7 @@ def test_env_override_token_budget(monkeypatch) -> None:
 
 
 # ── update_config_key edge cases ────────────────────────────────────
+
 
 def test_update_config_key_cache_ttl(tmp_path, monkeypatch) -> None:
     from adt import config as m

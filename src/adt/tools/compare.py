@@ -32,8 +32,7 @@ def _collect_paths(root: Path, *, max_entries: int) -> set[str]:
         dirnames[:] = [
             d
             for d in dirnames
-            if d not in SKIP_DIR_NAMES
-            and not d.endswith(".egg-info")
+            if d not in SKIP_DIR_NAMES and not d.endswith(".egg-info")
         ]
         current = Path(dirpath)
         try:

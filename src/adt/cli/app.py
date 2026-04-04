@@ -79,7 +79,7 @@ def version_cmd() -> None:
 def info_cmd() -> None:
     """Print short project status and feature summary."""
     typer.echo(
-        "adt — v1.0.0 production: PyPI package, optional HTTP API (`adt serve`), "
+        "adt — v1.1.0 production: PyPI package, optional HTTP API (`adt serve`), "
         "multi-repo ask, config.toml, LLM routing. Docs: README, docs/architecture.md.",
     )
 

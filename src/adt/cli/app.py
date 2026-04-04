@@ -66,7 +66,14 @@ def _format_ask_panel(agent_name: str, answer: str) -> None:
             ),
         )
         return
-    console.print(Panel(answer, title="Answer", border_style="green"))
+    console.print(
+        Panel(
+            Markdown(answer),
+            title="Answer",
+            border_style="green",
+            title_align="left",
+        ),
+    )
 
 
 @app.command("version")

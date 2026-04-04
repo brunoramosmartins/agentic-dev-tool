@@ -1,18 +1,40 @@
 # Agentic Dev Tool (adt)
 
 [![CI](https://github.com/brunoramosmartins/agentic-dev-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/brunoramosmartins/agentic-dev-tool/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/agentic-dev-tool.svg)](https://pypi.org/project/agentic-dev-tool/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A context-oriented AI assistant CLI built with a simplified Model Context Protocol (MCP). The project is designed for extensibility, real-world engineering use, and professional demonstration.
+Context-oriented **CLI** (and optional **HTTP API**) for working with repositories, GitHub project data, and research sources—using OpenAI tool calling and an **MCP-style** in-process tool layer (registry, JSON Schema, bounded context packing with **tiktoken**).
 
-## Status
+## Demo
 
-**Phase 6 — Advanced features:** Repeat **`--repo`** for **multi-repo** sessions (`r0`, `r1`, …); repo tools take optional **`repo_key`**; **`compare_repos`** diffs two roots. **LLM-based routing** (JSON classify, then keyword fallback) via config; **`~/.adt/config.toml`** holds defaults (`adt config show|set|path`). Optional **`agent_chain`** runs several agents in one `ask`. **Phase 5** still applies (tiktoken budgets, tree cache, JSON logs). See [docs/agents.md](docs/agents.md).
+Record a terminal session (e.g. [asciinema](https://asciinema.org/)) and link it here or in your portfolio. Suggested flow: `adt ask "…" --repo .`, then multi-repo `--repo a --repo b`, then `adt config show`. See [docs/portfolio.md](docs/portfolio.md).
+
+## Status (v1.0.0)
+
+**Production release** on PyPI as **`agentic-dev-tool`**. Features: multi-repo **`--repo`**, **`compare_repos`**, hybrid **LLM + keyword routing**, **`~/.adt/config.toml`**, optional **`agent_chain`**, JSON logs, tree cache, and optional **`adt serve`** (FastAPI). Documentation: [docs/architecture.md](docs/architecture.md), [docs/mcp.md](docs/mcp.md), [docs/agents.md](docs/agents.md), [CHANGELOG.md](CHANGELOG.md).
 
 ## Installation
 
 Requires **Python 3.10+**.
+
+### From PyPI (users)
+
+```bash
+pip install agentic-dev-tool
+adt version
+```
+
+Optional HTTP API:
+
+```bash
+pip install "agentic-dev-tool[api]"
+adt serve --port 8765
+# OpenAPI: http://127.0.0.1:8765/docs
+```
+
+### From source (contributors)
 
 ```bash
 python -m venv .venv
@@ -106,16 +128,44 @@ adt ask "List issues" --repo myorg/repo --agent project_agent
 - `--no-cache` — skip reading/writing the repo tree cache for this run.
 - `--model`, `-m` — OpenAI model (default from **`~/.adt/config.toml`** or `gpt-4o-mini`).
 
-Other commands:
+### HTTP API (optional)
+
+With `[api]` installed, **`adt serve`** binds to **127.0.0.1:8765** by default:
+
+- **`GET /healthz`** — liveness JSON (`status`, `version`).
+- **`POST /ask`** — JSON body: `query`, optional `repo` (list), `github_token`, `agent`, `no_cache`, `model`. Same orchestration as **`adt ask`**; requires **`OPENAI_API_KEY`** in the server environment.
+
+### Command summary
+
+| Command | Purpose |
+|--------|---------|
+| `adt ask …` | Main agent loop (routing, tools, answer). |
+| `adt serve` | Start FastAPI + uvicorn (`[api]` extra). |
+| `adt config show` / `path` / `set` | Manage `~/.adt/config.toml`. |
+| `adt version` | Package version. |
+| `adt info` | Short feature blurb. |
 
 ```bash
 adt --help
 adt ask --help
+adt serve --help
 adt config show
 adt config set default_model gpt-4o-mini
 adt version
 adt info
 ```
+
+## Architecture (overview)
+
+```text
+CLI / HTTP
+    → ask_session.run_ask
+    → build_runner (tools + HybridSupervisor + LLMClient + ContextBuilder)
+    → Runner (budget, context, chat + tool loop)
+    → AgentResponse
+```
+
+Details: [docs/architecture.md](docs/architecture.md). MCP-style tools: [docs/mcp.md](docs/mcp.md).
 
 ### Example session (shape of output)
 
@@ -128,6 +178,7 @@ make lint      # ruff check
 make format    # ruff format
 make test      # pytest with coverage (excludes live LLM tests by default)
 make typecheck # mypy src/
+python -m build   # sdist + wheel into dist/ (requires `pip install build`)
 ```
 
 Default pytest runs exclude tests marked `@pytest.mark.live`. For live OpenAI (and real GitHub when tests call the network):

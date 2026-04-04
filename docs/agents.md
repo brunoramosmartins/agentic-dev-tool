@@ -73,3 +73,21 @@ When the runner builds repository context for `repo_agent` (and related paths), 
 **GitHub authentication:** Handlers receive a token from the CLI (`--token`) or environment **`GITHUB_TOKEN`**. Without a token, expect about **60 requests/hour** per IP; **403** responses include rate-limit hints when GitHub provides headers.
 
 **Context:** If a GitHub slug was passed on the CLI, the user message includes the default `owner/repo`. If only a local path was used, the runner adds repo tree context plus the markdown root path. Remote slug sessions skip the full tree (only short session hints) to avoid dumping unrelated `cwd` files.
+
+## Prompt engineering notes
+
+System prompts are **static strings** on each agent class (`repo_agent`, `project_agent`, `research_agent`). They are written to:
+
+- **Steer tool order** — e.g. repo agent starts with `read_repo_tree` unless paths are explicit; caps file reads per turn.
+- **Reduce hallucination** — instruct not to invent files or run shell commands; cite paths from tool output.
+- **Separate concerns** — project agent emphasizes GitHub API + markdown root; research agent emphasizes arXiv and safe HTTP fetch only.
+
+The **user message** assembled by `Runner` prepends the **packed context** (repo blocks, metadata) and ends with `User question:\n…`. No separate “chain-of-thought” channel: the model sees one user blob per turn.
+
+**Routing prompt** (`HybridSupervisor`) is minimal JSON-only: map the user text to one of three agent ids. It is kept short to limit latency and cost; failures fall back to **keyword routing** so behavior stays predictable in tests and offline scenarios.
+
+Tuning tips:
+
+- Adjust **keyword lists** in `supervisor.py` when users consistently mis-route.
+- Adjust **router system string** in `hybrid_supervisor.py` if the LLM over-selects one agent.
+- For **stricter repo behavior**, tighten the repo agent system prompt (e.g. max files, required `repo_key` wording for multi-repo).

@@ -4,15 +4,25 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-dev-tool"
-version = "0.7.0"
-description = "Context-oriented AI assistant CLI with a simplified MCP-style tool layer."
+version = "1.0.0"
+description = "Context-oriented AI CLI and optional HTTP API: agents, MCP-style tools, multi-repo, OpenAI."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 authors = [{ name = "Bruno Ramos Martins" }]
-keywords = ["cli", "ai", "agents", "mcp", "llm"]
+maintainers = [{ name = "Bruno Ramos Martins" }]
+keywords = [
+  "cli",
+  "ai",
+  "agents",
+  "mcp",
+  "llm",
+  "openai",
+  "fastapi",
+  "typer",
+]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 5 - Production/Stable",
   "Environment :: Console",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
@@ -20,6 +30,7 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Libraries :: Python Modules",
   "Typing :: Typed",
 ]
 dependencies = [
@@ -36,12 +47,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+api = [
+  "fastapi>=0.109",
+  "uvicorn[standard]>=0.27",
+]
 dev = [
   "pytest>=7.4",
   "pytest-cov>=4.1",
   "ruff>=0.6",
   "mypy>=1.8",
   "pre-commit>=3.6",
+  "build>=1.0",
+  "fastapi>=0.109",
+  "uvicorn[standard]>=0.27",
 ]
 test = [
   "pytest>=7.4",
@@ -54,13 +72,21 @@ adt = "adt.cli.app:app"
 [project.urls]
 Homepage = "https://github.com/brunoramosmartins/agentic-dev-tool"
 Repository = "https://github.com/brunoramosmartins/agentic-dev-tool"
+Documentation = "https://github.com/brunoramosmartins/agentic-dev-tool/tree/main/docs"
+Changelog = "https://github.com/brunoramosmartins/agentic-dev-tool/blob/main/CHANGELOG.md"
 Issues = "https://github.com/brunoramosmartins/agentic-dev-tool/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/adt"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/adt", "README.md", "LICENSE"]
+include = [
+  "src/adt",
+  "README.md",
+  "LICENSE",
+  "CHANGELOG.md",
+  "docs",
+]
 
 [tool.ruff]
 target-version = "py310"
@@ -96,6 +122,18 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "tomli_w"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "fastapi"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "fastapi.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "uvicorn"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

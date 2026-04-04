@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-dev-tool"
-version = "0.5.0"
+version = "0.6.0"
 description = "Context-oriented AI assistant CLI with a simplified MCP-style tool layer."
 readme = "README.md"
 license = { text = "MIT" }
@@ -30,6 +30,7 @@ dependencies = [
   "rich>=13.0",
   "jsonschema>=4.20",
   "pathspec>=0.12",
+  "tiktoken>=0.5",
 ]
 
 [project.optional-dependencies]
@@ -81,6 +82,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "pathspec"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tiktoken"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

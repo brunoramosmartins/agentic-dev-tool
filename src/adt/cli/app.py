@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from importlib import metadata
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -13,6 +13,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from adt.bootstrap import build_runner
+from adt.logging.json_log import setup_adt_file_logging
 from adt.models.schemas import QueryRequest
 from adt.repo_spec import resolve_repo_target
 
@@ -27,7 +28,7 @@ def _version_string() -> str:
     try:
         return metadata.version("agentic-dev-tool")
     except metadata.PackageNotFoundError:
-        return "0.5.0-dev"
+        return "0.6.0-dev"
 
 
 def _format_ask_panel(agent_name: str, answer: str) -> None:
@@ -65,8 +66,9 @@ def version_cmd() -> None:
 def info_cmd() -> None:
     """Print short project status and feature summary."""
     typer.echo(
-        "adt — Phase 4. ask: local path or owner/repo; GitHub tools for "
-        "project_agent; --token or GITHUB_TOKEN for API limits.",
+        "adt — Phase 5. ask: MCP hardening (tiktoken budgets, ranked repo context, "
+        "tree cache under ~/.adt/cache, JSON logs under ~/.adt/logs). "
+        "Flags: --log-level, --no-cache.",
     )
 
 
@@ -111,6 +113,20 @@ def ask_cmd(
         bool,
         typer.Option("--verbose", "-v", help="Print debug logs and token usage."),
     ] = False,
+    log_level: Annotated[
+        str,
+        typer.Option(
+            "--log-level",
+            help="File log level: DEBUG, INFO, WARNING, ERROR (default INFO).",
+        ),
+    ] = "INFO",
+    no_cache: Annotated[
+        bool,
+        typer.Option(
+            "--no-cache",
+            help="Disable repository tree disk cache for this request.",
+        ),
+    ] = False,
     model: Annotated[
         str,
         typer.Option(
@@ -121,8 +137,6 @@ def ask_cmd(
     ] = "gpt-4o-mini",
 ) -> None:
     """Ask a question: supervisor picks an agent unless ``--agent`` is set."""
-    if verbose:
-        logging.basicConfig(level=logging.DEBUG)
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         console.print(
@@ -143,6 +157,12 @@ def ask_cmd(
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
+    lvl = getattr(logging, log_level.upper(), logging.INFO)
+    if verbose:
+        lvl = logging.DEBUG
+    setup_adt_file_logging(level=lvl)
+    logging.getLogger("adt").setLevel(lvl)
+
     github_token = token.strip() if token else None
     if not github_token:
         env_gh = os.environ.get("GITHUB_TOKEN")
@@ -153,15 +173,27 @@ def ask_cmd(
         model=model,
         api_key=api_key,
         github_token=github_token,
+        use_context_cache=not no_cache,
     )
+    opts: dict[str, Any] = {}
+    if no_cache:
+        opts["no_cache"] = True
     request = QueryRequest(
         query=query,
         repo_path=str(target.local_root),
         github_owner=target.github_owner,
         github_repo=target.github_repo,
         force_agent=agent,
+        options=opts,
     )
-    response = runner.run(request)
+    try:
+        response = runner.run(request)
+    except Exception as exc:  # noqa: BLE001 — last-resort CLI guard
+        console.print(
+            "[red]Unexpected error while running the agent.[/red] "
+            f"({type(exc).__name__}: {exc})",
+        )
+        raise typer.Exit(code=1) from exc
 
     routed = response.routed_agent or agent or "supervisor"
     console.print(f"[dim]Agent:[/dim] [bold]{routed}[/bold]")
@@ -172,6 +204,9 @@ def ask_cmd(
         console.print(f"[dim]Last LLM token usage:[/dim] {runner.last_token_usage}")
         ctx = response.context_summary
         console.print(f"[dim]Context summary (truncated):[/dim] {ctx!r}")
+        br = getattr(runner, "last_budget_report", None)
+        if br:
+            console.print(f"[dim]Token budget (estimated):[/dim] {br}")
 
 
 if __name__ == "__main__":

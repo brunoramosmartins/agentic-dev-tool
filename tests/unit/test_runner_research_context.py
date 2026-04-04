@@ -26,19 +26,23 @@ class SpyContext(ContextBuilder):
         self,
         path: str,
         *,
+        query: str | None = None,
         max_depth: int = 4,
-        max_files: int = 24,
+        max_files: int = 48,
         max_chars_per_file: int = 4000,
-        max_total_tokens: int = 8000,
+        max_context_tokens: int | None = None,
+        use_cache: bool = True,
     ) -> str:
         """Increment repo counter and delegate to the base implementation."""
         self.repo_calls += 1
         return super().build_from_repo(
             path,
+            query=query,
             max_depth=max_depth,
             max_files=max_files,
             max_chars_per_file=max_chars_per_file,
-            max_total_tokens=max_total_tokens,
+            max_context_tokens=max_context_tokens,
+            use_cache=use_cache,
         )
 
     def build_from_text(self, text: str, *, max_tokens: int | None = None) -> str:

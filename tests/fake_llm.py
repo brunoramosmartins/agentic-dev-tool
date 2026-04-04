@@ -15,13 +15,16 @@ class FakeLLM:
         self._replies = list(replies)
         self._idx = 0
         self.last_usage: dict[str, int] = {}
+        self.model = "gpt-4o-mini"
 
     def chat(
         self,
         messages: Sequence[LLMMessage],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        max_completion_tokens: int | None = None,
     ) -> LLMMessage:
-        del messages, tools
+        del messages, tools, max_completion_tokens
         if self._idx >= len(self._replies):
             return LLMMessage(role="assistant", content="")
         r = self._replies[self._idx]

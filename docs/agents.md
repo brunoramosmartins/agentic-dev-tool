@@ -2,19 +2,24 @@
 
 This document summarizes built-in agents, their tools, and how routing works.
 
+## `--repo`: local path vs `owner/repo`
+
+- **Existing directory:** used as the root for **repo tools** (`repo_agent`) and **markdown reads** (`project_agent`). `QueryRequest.repo_path` is that directory; no default GitHub slug is implied.
+- **`owner/repo` slug** (only when that string is **not** an existing path): `repo_path` is set to the **current working directory** (markdown root), and `github_owner` / `github_repo` are filled for session hints. The runner defaults ambiguous queries to **`project_agent`** (see below).
+
 ## Supervisor routing
 
 The supervisor inspects the user query (lowercased) with simple substring rules, in order:
 
-1. **Project** — keywords such as `issue`, `milestone`, `roadmap`, `project`, `sprint`, `backlog` → `project_agent` (stub until Phase 4).
+1. **Project** — keywords such as `issue`, `issues`, `milestone`, `roadmap`, `project`, `sprint`, `backlog`, `github`, `epic`, `ticket`, `release`, `kanban`, `board`, `assignee`, `pull request`, `triaged` → `project_agent`.
 2. **Research** — keywords such as `paper`, `papers`, `arxiv`, `article`, `research`, `literature`, `survey`, `publication`, `journal`, `preprint`, `doi`, and the phrase `literature review` → `research_agent`.
-3. **Repository** — keywords such as `repo`, `code`, `codebase`, `architecture`, `explain`, `file`, `function`, `implementation`, and **`search`** → `repo_agent`. Including `search` under the repo bucket avoids sending generic “search the codebase” questions to the research agent.
-4. **Default** — if nothing matches, the query is handled by **`repo_agent`**.
+3. **Repository** — keywords such as `repo`, `code`, `codebase`, `architecture`, `explain`, `file`, `function`, `implementation`, and **`search`** → `repo_agent`.
+4. **Default** — if nothing matches: **`project_agent`** when `github_owner` / `github_repo` are set (remote `--repo`); otherwise **`repo_agent`**.
 
 You can bypass routing with:
 
 ```bash
-adt ask "your question" --repo . --agent research_agent
+adt ask "your question" --repo . --agent project_agent
 ```
 
 Valid values: `repo_agent`, `research_agent`, `project_agent`.
@@ -23,25 +28,31 @@ Valid values: `repo_agent`, `research_agent`, `project_agent`.
 
 **Purpose:** Understand a local checkout (layout, files, symbols).
 
-**Tools:**
+**Tools:** `read_repo_tree`, `read_file`, `search_code`.
 
-- `read_repo_tree` — directory tree respecting `.gitignore`.
-- `read_file` — bounded read of a text file.
-- `search_code` — regex search across text files.
-
-**Context:** The runner attaches repository-derived context for this agent (unless you force another agent).
+**Context:** Repository-derived context from `repo_path`.
 
 ## `research_agent`
 
-**Purpose:** Discover academic papers and read public web articles to support technical study.
+**Purpose:** Discover academic papers and read public web articles.
 
 **Tools:**
 
-- `search_papers` — queries the public **arXiv Atom API** (`http://export.arxiv.org/api/query`) with `search_query=all:{query}` and returns titles, authors, abstract snippets, and abstract URLs. No API key is required. Results are clamped to at most 50 items per call; the CLI uses a descriptive `User-Agent` string.
-- `fetch_article` — downloads an `http` or `https` URL with `httpx`, enforces a response size cap, and extracts visible text from HTML (scripts/styles skipped) or returns plain text bodies. **Local and non-global hosts are rejected** (basic SSRF mitigation).
+- `search_papers` — arXiv Atom API (`http://export.arxiv.org/api/query`).
+- `fetch_article` — public HTTP(S) pages with basic SSRF blocking.
 
-**Context:** The runner does **not** load the repository tree for `research_agent`, even if `--repo` is set, so prompts stay focused on external sources. Use `--agent repo_agent` (or a repo-oriented question) when you need both codebase and papers in one session.
+**Context:** Empty repository blob; external sources only.
 
 ## `project_agent`
 
-**Purpose:** Placeholder for GitHub-centric workflows (Phase 4+). No tools yet.
+**Purpose:** Roadmap and delivery status via **GitHub** and **local markdown**.
+
+**Tools:**
+
+- `read_issues` — `GET /repos/{owner}/{repo}/issues` (pull requests filtered out). Optional `state` (`open` / `closed` / `all`), `labels`, `max_results`.
+- `read_milestones` — `GET /repos/{owner}/{repo}/milestones`.
+- `read_markdown` — read `.md` / `.markdown` under the session markdown root; strips optional YAML front matter (`---` … `---`).
+
+**GitHub authentication:** Handlers receive a token from the CLI (`--token`) or environment **`GITHUB_TOKEN`**. Without a token, expect about **60 requests/hour** per IP; **403** responses include rate-limit hints when GitHub provides headers.
+
+**Context:** If a GitHub slug was passed on the CLI, the user message includes the default `owner/repo`. If only a local path was used, the runner adds repo tree context plus the markdown root path. Remote slug sessions skip the full tree (only short session hints) to avoid dumping unrelated `cwd` files.

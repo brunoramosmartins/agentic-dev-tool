@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from adt.bootstrap import register_repo_tools, register_research_tools
+from adt.bootstrap import (
+    register_project_tools,
+    register_repo_tools,
+    register_research_tools,
+)
 from adt.mcp.registry import ToolRegistry
 
 
@@ -14,8 +18,10 @@ from adt.mcp.registry import ToolRegistry
 def tool_registry(sample_repo_path: str) -> ToolRegistry:
     """A tool registry with repo tools bound to the sample fixture repository."""
     reg = ToolRegistry()
-    register_repo_tools(reg, Path(sample_repo_path))
+    root = Path(sample_repo_path)
+    register_repo_tools(reg, root)
     register_research_tools(reg)
+    register_project_tools(reg, root, token=None)
     return reg
 
 

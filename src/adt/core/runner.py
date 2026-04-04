@@ -83,10 +83,32 @@ class Runner:
             routed = self._supervisor.route(request)
         agent = self._agents[routed.agent_name]
 
+        req = routed.request
         if routed.agent_name == "research_agent":
             raw_context = self._context.build_from_text("")
-        elif routed.request.repo_path:
-            raw_context = self._context.build_from_repo(routed.request.repo_path)
+        elif routed.agent_name == "project_agent":
+            parts: list[str] = []
+            if req.github_owner and req.github_repo:
+                parts.append(
+                    f"Default GitHub repository: {req.github_owner}/{req.github_repo}. "
+                    "Use these owner and repo values in read_issues and "
+                    "read_milestones unless the user specifies another repository."
+                )
+            if req.repo_path:
+                parts.append(
+                    "Local markdown root for read_markdown (relative paths): "
+                    f"{req.repo_path}"
+                )
+            meta = "\n".join(parts)
+            if req.github_owner and req.github_repo:
+                raw_context = self._context.build_from_text(meta)
+            elif req.repo_path:
+                repo_blob = self._context.build_from_repo(req.repo_path)
+                raw_context = f"{meta}\n\n{repo_blob}" if meta else repo_blob
+            else:
+                raw_context = self._context.build_from_text(meta)
+        elif req.repo_path:
+            raw_context = self._context.build_from_repo(req.repo_path)
         else:
             raw_context = self._context.build_from_text("")
 

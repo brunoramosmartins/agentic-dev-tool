@@ -1,11 +1,10 @@
-"""Typer CLI entry point including the ``ask`` command (repo and research agents)."""
+"""Typer CLI entry point including the ``ask`` command (all agents)."""
 
 from __future__ import annotations
 
 import logging
 import os
 from importlib import metadata
-from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -13,8 +12,9 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from adt.bootstrap import build_runner_for_repo
+from adt.bootstrap import build_runner
 from adt.models.schemas import QueryRequest
+from adt.repo_spec import resolve_repo_target
 
 app = typer.Typer(help="Agentic Dev Tool CLI", add_completion=False)
 console = Console()
@@ -27,7 +27,7 @@ def _version_string() -> str:
     try:
         return metadata.version("agentic-dev-tool")
     except metadata.PackageNotFoundError:
-        return "0.4.0-dev"
+        return "0.5.0-dev"
 
 
 def _format_ask_panel(agent_name: str, answer: str) -> None:
@@ -38,6 +38,16 @@ def _format_ask_panel(agent_name: str, answer: str) -> None:
                 Markdown(answer),
                 title="Answer",
                 border_style="cyan",
+                title_align="left",
+            ),
+        )
+        return
+    if agent_name == "project_agent":
+        console.print(
+            Panel(
+                Markdown(answer),
+                title="Answer",
+                border_style="magenta",
                 title_align="left",
             ),
         )
@@ -55,8 +65,8 @@ def version_cmd() -> None:
 def info_cmd() -> None:
     """Print short project status and feature summary."""
     typer.echo(
-        'adt — Phase 3. Use: adt ask "question" --repo . '
-        "or research queries (arXiv). Optional: --agent research_agent.",
+        "adt — Phase 4. ask: local path or owner/repo; GitHub tools for "
+        "project_agent; --token or GITHUB_TOKEN for API limits.",
     )
 
 
@@ -69,17 +79,23 @@ def ask_cmd(
         ),
     ],
     repo: Annotated[
-        Path,
+        str,
         typer.Option(
             "--repo",
             "-r",
-            help="Path to the repository root (for context and repo tools).",
-            exists=True,
-            file_okay=False,
-            dir_okay=True,
-            resolve_path=True,
+            help=(
+                "Local directory or GitHub slug owner/repo (markdown root uses cwd "
+                "when slug is used)."
+            ),
         ),
-    ] = Path("."),
+    ] = ".",
+    token: Annotated[
+        str | None,
+        typer.Option(
+            "--token",
+            help="GitHub PAT for read_issues / read_milestones (or set GITHUB_TOKEN).",
+        ),
+    ] = None,
     agent: Annotated[
         str | None,
         typer.Option(
@@ -122,15 +138,27 @@ def ask_cmd(
         )
         raise typer.Exit(code=1)
 
-    repo_path = repo.resolve()
-    runner = build_runner_for_repo(
-        repo_path,
+    try:
+        target = resolve_repo_target(repo)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    github_token = token.strip() if token else None
+    if not github_token:
+        env_gh = os.environ.get("GITHUB_TOKEN")
+        github_token = env_gh.strip() if env_gh else None
+
+    runner = build_runner(
+        target.local_root,
         model=model,
         api_key=api_key,
+        github_token=github_token,
     )
     request = QueryRequest(
         query=query,
-        repo_path=str(repo_path),
+        repo_path=str(target.local_root),
+        github_owner=target.github_owner,
+        github_repo=target.github_repo,
         force_agent=agent,
     )
     response = runner.run(request)

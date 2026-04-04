@@ -14,6 +14,7 @@ from adt.core.supervisor import Supervisor
 from adt.mcp.context import ContextBuilder
 from adt.mcp.executor import ExecutionController
 from adt.mcp.registry import ToolDefinition, ToolRegistry
+from adt.tools import project as project_tools
 from adt.tools import repo as repo_tools
 from adt.tools import research as research_tools
 
@@ -205,27 +206,188 @@ def register_research_tools(registry: ToolRegistry) -> None:
     )
 
 
-def build_runner_for_repo(
-    repo_root: Path,
+def register_project_tools(
+    registry: ToolRegistry,
+    markdown_root: Path,
+    *,
+    token: str | None = None,
+) -> None:
+    """Register GitHub and local markdown tools for ``project_agent``.
+
+    Handlers for issues and milestones pass through ``token`` for authenticated
+    GitHub API access (higher rate limits). ``read_markdown`` is confined to
+    ``markdown_root``.
+
+    Args:
+        registry: Registry without conflicting tool names.
+        markdown_root: Base path for :func:`~adt.tools.project.read_markdown`.
+        token: Optional GitHub PAT (or ``GITHUB_TOKEN`` supplied by the caller).
+    """
+    root = markdown_root.resolve()
+
+    def read_issues(
+        owner: str,
+        repo: str,
+        state: str = "open",
+        labels: str = "",
+        max_results: int = 30,
+    ) -> str:
+        """List issues via :func:`adt.tools.project.read_issues` with shared token."""
+        return project_tools.read_issues(
+            owner,
+            repo,
+            state=state,
+            labels=labels,
+            max_results=max_results,
+            token=token,
+        )
+
+    def read_milestones(
+        owner: str,
+        repo: str,
+        state: str = "open",
+        max_results: int = 20,
+    ) -> str:
+        """List milestones via :func:`adt.tools.project.read_milestones`."""
+        return project_tools.read_milestones(
+            owner,
+            repo,
+            state=state,
+            max_results=max_results,
+            token=token,
+        )
+
+    def read_markdown(path: str, max_chars: int = 120_000) -> str:
+        """Read markdown under the configured root."""
+        return project_tools.read_markdown(root, path, max_chars=max_chars)
+
+    registry.register(
+        ToolDefinition(
+            name="read_issues",
+            description=(
+                "List GitHub issues for a repository (pull requests excluded). "
+                "Unauthenticated calls are rate-limited (~60/hour per IP); "
+                "prefer a token for private repos or heavier use."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "owner": {
+                        "type": "string",
+                        "description": "GitHub user or organization login.",
+                    },
+                    "repo": {
+                        "type": "string",
+                        "description": "Repository name.",
+                    },
+                    "state": {
+                        "type": "string",
+                        "description": "open, closed, or all (default open).",
+                        "enum": ["open", "closed", "all"],
+                    },
+                    "labels": {
+                        "type": "string",
+                        "description": "Comma-separated label filters (optional).",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Max issues to return (1–100, default 30).",
+                        "minimum": 1,
+                        "maximum": 100,
+                    },
+                },
+                "required": ["owner", "repo"],
+                "additionalProperties": False,
+            },
+            allowed_agents=["project_agent"],
+            handler=read_issues,
+        ),
+    )
+    registry.register(
+        ToolDefinition(
+            name="read_milestones",
+            description=(
+                "List GitHub milestones for a repository with open/closed counts."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "owner": {"type": "string", "description": "Owner login."},
+                    "repo": {"type": "string", "description": "Repository name."},
+                    "state": {
+                        "type": "string",
+                        "description": "open, closed, or all (default open).",
+                        "enum": ["open", "closed", "all"],
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Max milestones (1–50, default 20).",
+                        "minimum": 1,
+                        "maximum": 50,
+                    },
+                },
+                "required": ["owner", "repo"],
+                "additionalProperties": False,
+            },
+            allowed_agents=["project_agent"],
+            handler=read_milestones,
+        ),
+    )
+    registry.register(
+        ToolDefinition(
+            name="read_markdown",
+            description=(
+                "Read a local .md or .markdown file relative to the session root; "
+                "YAML front matter is stripped when present."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to the markdown file.",
+                    },
+                    "max_chars": {
+                        "type": "integer",
+                        "description": "Max characters of body text (default 120000).",
+                        "minimum": 1000,
+                        "maximum": 500000,
+                    },
+                },
+                "required": ["path"],
+                "additionalProperties": False,
+            },
+            allowed_agents=["project_agent"],
+            handler=read_markdown,
+        ),
+    )
+
+
+def build_runner(
+    local_root: Path,
     *,
     model: str = "gpt-4o-mini",
     api_key: str | None = None,
+    github_token: str | None = None,
     max_tool_iterations: int = 5,
 ) -> Runner:
-    """Construct a :class:`~adt.core.runner.Runner` scoped to one repository path.
+    """Construct a :class:`~adt.core.runner.Runner` for the full agent/tool set.
 
     Args:
-        repo_root: Local repository directory for tools and context.
+        local_root: Directory for repo tools and project_agent markdown reads.
         model: OpenAI chat model name.
         api_key: Optional API key (falls back to ``OPENAI_API_KEY`` in the client).
+        github_token: Optional token forwarded to GitHub REST tools.
         max_tool_iterations: Upper bound on LLM/tool round-trips.
 
     Returns:
-        A fully wired runner with repo and research tools registered.
+        A runner with repo, research, and project tools registered.
     """
     registry = ToolRegistry()
-    register_repo_tools(registry, repo_root)
+    root = local_root.resolve()
+    register_repo_tools(registry, root)
     register_research_tools(registry)
+    register_project_tools(registry, root, token=github_token)
     supervisor = Supervisor()
     llm = LLMClient(model=model, api_key=api_key)
     context = ContextBuilder()
@@ -242,5 +404,23 @@ def build_runner_for_repo(
         executor,
         registry,
         agents,
+        max_tool_iterations=max_tool_iterations,
+    )
+
+
+def build_runner_for_repo(
+    repo_root: Path,
+    *,
+    model: str = "gpt-4o-mini",
+    api_key: str | None = None,
+    github_token: str | None = None,
+    max_tool_iterations: int = 5,
+) -> Runner:
+    """Backward-compatible alias for :func:`build_runner` with a repository path."""
+    return build_runner(
+        repo_root,
+        model=model,
+        api_key=api_key,
+        github_token=github_token,
         max_tool_iterations=max_tool_iterations,
     )

@@ -17,7 +17,18 @@ class QueryRequest(BaseModel):
     query: str = Field(..., description="Natural language question or instruction.")
     repo_path: str | None = Field(
         default=None,
-        description="Optional filesystem path to a repository root.",
+        description=(
+            "Local directory: repository root for repo tools and markdown root "
+            "for project_agent."
+        ),
+    )
+    github_owner: str | None = Field(
+        default=None,
+        description="With github_repo, default GitHub API owner login.",
+    )
+    github_repo: str | None = Field(
+        default=None,
+        description="With github_owner, default GitHub API repository name.",
     )
     options: dict[str, Any] = Field(
         default_factory=dict,
@@ -30,6 +41,16 @@ class QueryRequest(BaseModel):
             "(e.g. research_agent, repo_agent)."
         ),
     )
+
+    @model_validator(mode="after")
+    def github_owner_repo_pair(self) -> QueryRequest:
+        """Require ``github_owner`` and ``github_repo`` to be set together."""
+        has_o = self.github_owner is not None
+        has_r = self.github_repo is not None
+        if has_o ^ has_r:
+            msg = "github_owner and github_repo must both be set or both omitted."
+            raise ValueError(msg)
+        return self
 
 
 class ToolCall(BaseModel):

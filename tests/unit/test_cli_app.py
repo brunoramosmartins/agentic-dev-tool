@@ -38,7 +38,7 @@ def test_cli_ask_requires_api_key(tmp_path) -> None:
 
 
 @patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}, clear=False)
-@patch("adt.cli.app.build_runner_for_repo")
+@patch("adt.cli.app.build_runner")
 def test_cli_ask_runs_runner(mock_build, tmp_path) -> None:
     """``ask`` should call ``build_runner_for_repo`` and print the model answer."""
     mock_runner = MagicMock()
@@ -65,7 +65,7 @@ def test_cli_ask_runs_runner(mock_build, tmp_path) -> None:
 
 
 @patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}, clear=False)
-@patch("adt.cli.app.build_runner_for_repo")
+@patch("adt.cli.app.build_runner")
 def test_cli_ask_accepts_force_agent(mock_build, tmp_path) -> None:
     """``--agent`` should be forwarded on :class:`~adt.models.schemas.QueryRequest`."""
     mock_runner = MagicMock()
@@ -96,7 +96,7 @@ def test_cli_ask_accepts_force_agent(mock_build, tmp_path) -> None:
     assert req.force_agent == "research_agent"
 
 
-@patch("adt.cli.app.build_runner_for_repo")
+@patch("adt.cli.app.build_runner")
 def test_cli_ask_rejects_invalid_agent(mock_build, tmp_path) -> None:
     """Unknown ``--agent`` values must exit before the runner is built."""
     runner = CliRunner()

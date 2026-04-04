@@ -6,11 +6,22 @@ from adt.models.schemas import QueryRequest, RoutedRequest
 
 _PROJECT_KEYWORDS = (
     "issue",
+    "issues",
     "milestone",
+    "milestones",
     "roadmap",
     "project",
     "sprint",
     "backlog",
+    "github",
+    "epic",
+    "ticket",
+    "release",
+    "kanban",
+    "board",
+    "assignee",
+    "pull request",
+    "triaged",
 )
 _RESEARCH_KEYWORDS = (
     "paper",
@@ -47,13 +58,19 @@ class Supervisor:
     def route(self, request: QueryRequest) -> RoutedRequest:
         """Return the agent name and a possibly enriched ``QueryRequest``.
 
-        Precedence: project keywords, then research, then repository, then default
-        ``repo_agent``. Matching is case-insensitive via substring search. The word
-        ``search`` maps to the repository agent so that codebase queries are not
-        misrouted to research.
+        Precedence: project keywords, then research, then repository, then default.
+        The default is ``repo_agent`` for local sessions and ``project_agent`` when
+        ``github_owner`` / ``github_repo`` are set (``--repo owner/repo``). The word
+        ``search`` maps to the repository agent so codebase queries are not sent to
+        research.
         """
         text = request.query.lower()
         enriched = request.model_copy(deep=True)
+        default_agent = (
+            "project_agent"
+            if (enriched.github_owner and enriched.github_repo)
+            else "repo_agent"
+        )
 
         if any(k in text for k in _PROJECT_KEYWORDS):
             enriched.options = {**enriched.options, "route": "project_keywords"}
@@ -68,4 +85,4 @@ class Supervisor:
             return RoutedRequest(agent_name="repo_agent", request=enriched)
 
         enriched.options = {**enriched.options, "route": "default"}
-        return RoutedRequest(agent_name="repo_agent", request=enriched)
+        return RoutedRequest(agent_name=default_agent, request=enriched)

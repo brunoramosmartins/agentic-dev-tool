@@ -8,7 +8,7 @@ A context-oriented AI assistant CLI built with a simplified Model Context Protoc
 
 ## Status
 
-**Phase 3 — Research Agent:** In addition to repository analysis, `adt ask` can route to a **research agent** that searches **arXiv** and fetches public **web articles** (HTML/text). Use natural phrasing (“papers on …”, “arxiv …”) or force routing with `--agent`. See [docs/agents.md](docs/agents.md) for routing rules and tool details.
+**Phase 4 — Project Agent:** `adt ask` supports **local paths** or **`owner/repo`** for `--repo`. The **project agent** calls the **GitHub REST API** for issues and milestones and reads **local markdown** (e.g. `README.md`, `ROADMAP.md`). Use **`GITHUB_TOKEN`** or **`--token`** for higher rate limits and private repositories. See [docs/agents.md](docs/agents.md).
 
 ## Installation
 
@@ -29,11 +29,11 @@ make install
 
 ## Configuration
 
-Copy the example env file and set your OpenAI API key:
+Copy the example env file and set your keys:
 
 ```bash
 cp .env.example .env
-# Edit .env: OPENAI_API_KEY=...
+# Edit .env: OPENAI_API_KEY=..., optional GITHUB_TOKEN=...
 ```
 
 `adt` reads `OPENAI_API_KEY` from the process environment. Load `.env` with your shell or a tool such as [direnv](https://direnv.net/) if you use one.
@@ -43,40 +43,46 @@ cp .env.example .env
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `OPENAI_API_KEY` | Yes, for `ask` | OpenAI API key for chat completions. |
-| `GITHUB_TOKEN` | No | Reserved for future GitHub-backed agents (see `.env.example`). |
+| `GITHUB_TOKEN` | No | GitHub PAT for `read_issues` / `read_milestones` (higher rate limits, private repos). |
 | `ADT_LIVE_MODEL` | No | Optional model override for `pytest -m live` (default `gpt-4o-mini`). |
 
 ## Usage
 
-### Ask about a repository
+### Local repository (code analysis)
 
 ```bash
 adt ask "What does this project do?" --repo .
 ```
 
-### Ask about papers and articles (research agent)
+### GitHub project (`owner/repo`)
 
-The supervisor sends research-like questions to `research_agent`, which can call **arXiv** and **fetch** public URLs:
+If `--repo` is a slug like `octocat/Hello-World` (and that path is **not** an existing folder), the CLI uses the **current working directory** as the **markdown root** for `read_markdown`, and sets the **default GitHub** target for the session context:
+
+```bash
+cd ~/my-clone   # optional: where ROADMAP.md / README.md live
+adt ask "Summarize open issues" --repo octocat/Hello-World
+adt ask "What milestones are open?" --repo myorg/my-repo --token ghp_xxx
+```
+
+Without a token, unauthenticated calls are limited to about **60 requests/hour** per IP; the tools return a clear message when GitHub responds with **403** rate-limit errors.
+
+### Research (arXiv / web)
 
 ```bash
 adt ask "Recent papers on retrieval augmented generation" --repo .
-adt ask "Summarize https://example.com/article" --repo .
 ```
-
-Research answers are rendered as **Rich Markdown** (cyan panel) so titles and links are easier to scan.
 
 ### Force a specific agent
 
-Skip supervisor routing when you know which agent you want:
-
 ```bash
 adt ask "Explain src layout" --repo . --agent repo_agent
-adt ask "Find arxiv papers on graph neural networks" --repo . --agent research_agent
+adt ask "List issues" --repo myorg/repo --agent project_agent
 ```
 
 ### Options
 
-- `--repo`, `-r` — repository root (default: current directory; must exist). Used for repo tools and for `repo_agent` / `project_agent` context; `research_agent` ignores repo content in the prompt.
+- `--repo`, `-r` — **Local directory** (must exist) **or** **`owner/repo`** GitHub slug. Slug form uses `cwd` as the markdown root.
+- `--token` — GitHub PAT for this run (overrides `GITHUB_TOKEN` when set).
 - `--agent`, `-a` — `repo_agent`, `research_agent`, or `project_agent`.
 - `--verbose`, `-v` — debug logging, last token usage, and a truncated context summary.
 - `--model`, `-m` — OpenAI model name (default: `gpt-4o-mini`).
@@ -92,7 +98,7 @@ adt info
 
 ### Example session (shape of output)
 
-With a valid key you will see an **Agent:** line, then an **Answer** panel (green for repo-style answers, cyan Markdown for research), then **Tools used** (for example `read_repo_tree`, `search_papers`, `fetch_article`). With `--verbose`, extra debug lines follow.
+You will see an **Agent:** line, an **Answer** panel (green text, cyan Markdown for research, magenta Markdown for project), and **Tools used** (e.g. `read_issues`, `read_milestones`, `read_markdown`, `read_repo_tree`). With `--verbose`, extra debug lines follow.
 
 ## Development
 
@@ -103,10 +109,10 @@ make test      # pytest with coverage (excludes live LLM tests by default)
 make typecheck # mypy src/
 ```
 
-Default pytest runs exclude tests marked `@pytest.mark.live` (real API calls). To exercise live OpenAI (and real arXiv) locally:
+Default pytest runs exclude tests marked `@pytest.mark.live`. For live OpenAI (and real GitHub when tests call the network):
 
 ```bash
-export OPENAI_API_KEY=...   # Windows PowerShell: $env:OPENAI_API_KEY="..."
+export OPENAI_API_KEY=...
 pytest -m live
 ```
 

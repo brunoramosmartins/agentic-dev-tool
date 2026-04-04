@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from adt.agents.base import BaseAgent
+from adt.agents.project_agent import ProjectAgent
 from adt.agents.repo_agent import RepoAgent
 from adt.agents.research_agent import ResearchAgent
 from adt.models.schemas import AgentResponse, QueryRequest
@@ -31,4 +32,14 @@ def test_research_agent_name_and_handle() -> None:
     r = a.handle(QueryRequest(query="q"), context="ctx")
     assert isinstance(r, AgentResponse)
     assert "research_agent" in r.answer
+    assert r.tools_used
+
+
+def test_project_agent_name_and_handle() -> None:
+    """Project agent should expose a stable id and non-empty tool list."""
+    a = ProjectAgent()
+    assert a.name == "project_agent"
+    r = a.handle(QueryRequest(query="q"), context="ctx")
+    assert isinstance(r, AgentResponse)
+    assert "project_agent" in r.answer
     assert r.tools_used

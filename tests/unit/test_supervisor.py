@@ -32,3 +32,18 @@ def test_route_agents(supervisor: Supervisor, query: str, expected: str) -> None
     out = supervisor.route(req)
     assert out.agent_name == expected
     assert "route" in out.request.options
+
+
+def test_default_route_github_slug_targets_project(
+    supervisor: Supervisor,
+) -> None:
+    """Remote ``--repo owner/repo`` defaults to ``project_agent``."""
+    req = QueryRequest(
+        query="hello there",
+        repo_path="C:\\fake\\cwd",
+        github_owner="acme",
+        github_repo="demo",
+    )
+    out = supervisor.route(req)
+    assert out.agent_name == "project_agent"
+    assert out.request.options.get("route") == "default"

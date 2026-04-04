@@ -11,6 +11,8 @@ from urllib.parse import urlparse
 
 import httpx
 
+from adt import __version__
+
 _ARXIV_API = "http://export.arxiv.org/api/query"
 _ATOM_NS = "{http://www.w3.org/2005/Atom}"
 _MAX_FETCH_BYTES = 2 * 1024 * 1024
@@ -150,7 +152,7 @@ def search_papers(query: str, max_results: int = 10) -> str:
             follow_redirects=True,
             headers={
                 "User-Agent": (
-                    "agentic-dev-tool/0.4 "
+                    f"agentic-dev-tool/{__version__} "
                     "(+https://github.com/brunoramosmartins/agentic-dev-tool)"
                 ),
             },
@@ -236,7 +238,7 @@ def fetch_article(url: str, max_chars: int = 80000) -> str:
                 follow_redirects=True,
                 headers={
                     "User-Agent": (
-                        "agentic-dev-tool/0.4 "
+                        f"agentic-dev-tool/{__version__} "
                         "(+https://github.com/brunoramosmartins/agentic-dev-tool)"
                     ),
                 },

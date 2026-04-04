@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 from adt.tools import repo as repo_tools
+from adt.tools._paths import SKIP_DIR_NAMES
 
 _KEY_FILES = (
     "pyproject.toml",
@@ -31,7 +32,7 @@ def _collect_paths(root: Path, *, max_entries: int) -> set[str]:
         dirnames[:] = [
             d
             for d in dirnames
-            if d not in repo_tools._ALWAYS_SKIP_DIR_NAMES
+            if d not in SKIP_DIR_NAMES
             and not d.endswith(".egg-info")
         ]
         current = Path(dirpath)

@@ -8,23 +8,8 @@ from pathlib import Path
 
 import pathspec
 
-_ALWAYS_SKIP_DIR_NAMES = frozenset(
-    {
-        ".git",
-        ".hg",
-        ".svn",
-        "__pycache__",
-        ".venv",
-        "venv",
-        "node_modules",
-        ".mypy_cache",
-        ".ruff_cache",
-        ".pytest_cache",
-        "dist",
-        "build",
-        ".eggs",
-    },
-)
+from adt.tools._paths import SKIP_DIR_NAMES as _ALWAYS_SKIP_DIR_NAMES
+from adt.tools._paths import safe_resolve_under as _safe_resolve_under
 
 
 def _load_gitignore_spec(repo_root: Path) -> pathspec.PathSpec | None:
@@ -47,29 +32,6 @@ def _load_gitignore_spec(repo_root: Path) -> pathspec.PathSpec | None:
     if not lines:
         return None
     return pathspec.PathSpec.from_lines("gitwildmatch", lines)
-
-
-def _safe_resolve_under(repo_root: Path, relative_path: str) -> Path:
-    """Resolve ``relative_path`` under ``repo_root``; reject path traversal.
-
-    Args:
-        repo_root: Repository root (should be resolved by the caller).
-        relative_path: User- or model-supplied relative path (POSIX-style ok).
-
-    Returns:
-        An absolute, resolved path inside ``repo_root``.
-
-    Raises:
-        ValueError: If the resolved path would escape ``repo_root``.
-    """
-    base = repo_root.resolve()
-    candidate = (base / relative_path).resolve()
-    try:
-        candidate.relative_to(base)
-    except ValueError as exc:
-        msg = "path escapes repository root"
-        raise ValueError(msg) from exc
-    return candidate
 
 
 def _posix_relative_to(repo_root: Path, path: Path) -> str:

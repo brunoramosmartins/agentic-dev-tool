@@ -31,3 +31,27 @@ def test_live_ask_minimal_repo(sample_repo_path: str) -> None:
         ),
     )
     assert len(res.answer.strip()) > 10
+
+
+@pytest.mark.live
+def test_live_ask_research_agent(sample_repo_path: str) -> None:
+    """Optional live run with ``research_agent`` and real arXiv tool calls."""
+    if not os.environ.get("OPENAI_API_KEY"):
+        pytest.skip("OPENAI_API_KEY not set")
+
+    runner = build_runner_for_repo(
+        Path(sample_repo_path),
+        model=os.environ.get("ADT_LIVE_MODEL", "gpt-4o-mini"),
+    )
+    res = runner.run(
+        QueryRequest(
+            query=(
+                "Use search_papers to find up to 3 papers on retrieval augmented "
+                "generation; list one title in your answer."
+            ),
+            repo_path=sample_repo_path,
+            force_agent="research_agent",
+        ),
+    )
+    assert len(res.answer.strip()) > 20
+    assert "search_papers" in res.tools_used

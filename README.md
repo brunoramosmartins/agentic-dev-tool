@@ -8,7 +8,7 @@ A context-oriented AI assistant CLI built with a simplified Model Context Protoc
 
 ## Status
 
-**Phase 2 — MVP (Repo Agent):** The `adt ask` command analyzes a local repository (directory tree, file reads, regex search) and answers questions via an LLM. Supervisor routing, tool registry, and Rich-formatted output are wired end-to-end.
+**Phase 3 — Research Agent:** In addition to repository analysis, `adt ask` can route to a **research agent** that searches **arXiv** and fetches public **web articles** (HTML/text). Use natural phrasing (“papers on …”, “arxiv …”) or force routing with `--agent`. See [docs/agents.md](docs/agents.md) for routing rules and tool details.
 
 ## Installation
 
@@ -44,6 +44,7 @@ cp .env.example .env
 |----------|----------|-------------|
 | `OPENAI_API_KEY` | Yes, for `ask` | OpenAI API key for chat completions. |
 | `GITHUB_TOKEN` | No | Reserved for future GitHub-backed agents (see `.env.example`). |
+| `ADT_LIVE_MODEL` | No | Optional model override for `pytest -m live` (default `gpt-4o-mini`). |
 
 ## Usage
 
@@ -53,9 +54,30 @@ cp .env.example .env
 adt ask "What does this project do?" --repo .
 ```
 
-Options:
+### Ask about papers and articles (research agent)
 
-- `--repo`, `-r` — repository root (default: current directory; must exist).
+The supervisor sends research-like questions to `research_agent`, which can call **arXiv** and **fetch** public URLs:
+
+```bash
+adt ask "Recent papers on retrieval augmented generation" --repo .
+adt ask "Summarize https://example.com/article" --repo .
+```
+
+Research answers are rendered as **Rich Markdown** (cyan panel) so titles and links are easier to scan.
+
+### Force a specific agent
+
+Skip supervisor routing when you know which agent you want:
+
+```bash
+adt ask "Explain src layout" --repo . --agent repo_agent
+adt ask "Find arxiv papers on graph neural networks" --repo . --agent research_agent
+```
+
+### Options
+
+- `--repo`, `-r` — repository root (default: current directory; must exist). Used for repo tools and for `repo_agent` / `project_agent` context; `research_agent` ignores repo content in the prompt.
+- `--agent`, `-a` — `repo_agent`, `research_agent`, or `project_agent`.
 - `--verbose`, `-v` — debug logging, last token usage, and a truncated context summary.
 - `--model`, `-m` — OpenAI model name (default: `gpt-4o-mini`).
 
@@ -70,7 +92,7 @@ adt info
 
 ### Example session (shape of output)
 
-With a valid key, you will see a green **Answer** panel (Rich), then a dim line listing **Tools used** (for example `read_repo_tree`, `read_file`, `search_code`). With `--verbose`, extra debug lines appear after that.
+With a valid key you will see an **Agent:** line, then an **Answer** panel (green for repo-style answers, cyan Markdown for research), then **Tools used** (for example `read_repo_tree`, `search_papers`, `fetch_article`). With `--verbose`, extra debug lines follow.
 
 ## Development
 
@@ -81,7 +103,7 @@ make test      # pytest with coverage (excludes live LLM tests by default)
 make typecheck # mypy src/
 ```
 
-Default pytest runs exclude tests marked `@pytest.mark.live` (real API calls). To exercise a live OpenAI call locally:
+Default pytest runs exclude tests marked `@pytest.mark.live` (real API calls). To exercise live OpenAI (and real arXiv) locally:
 
 ```bash
 export OPENAI_API_KEY=...   # Windows PowerShell: $env:OPENAI_API_KEY="..."

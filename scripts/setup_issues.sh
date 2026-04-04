@@ -13,6 +13,9 @@
 #   - Run from the repository root directory
 #
 # This script is idempotent: issues with the same title are skipped.
+#
+# NOTE: This file lives under scripts/. If you created issues using an older
+# workflow, re-running is safe—existing titles are skipped.
 # ==============================================================================
 
 set -euo pipefail

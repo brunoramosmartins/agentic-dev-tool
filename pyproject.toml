@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-dev-tool"
-version = "0.1.0"
+version = "0.2.0"
 description = "Context-oriented AI assistant CLI with a simplified MCP-style tool layer."
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 authors = [{ name = "Bruno Ramos Martins" }]
 keywords = ["cli", "ai", "agents", "mcp", "llm"]
 classifiers = [
@@ -17,6 +17,7 @@ classifiers = [
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Typing :: Typed",
@@ -27,6 +28,7 @@ dependencies = [
   "httpx>=0.25",
   "openai>=1.0",
   "rich>=13.0",
+  "jsonschema>=4.20",
 ]
 
 [project.optional-dependencies]
@@ -57,7 +59,7 @@ packages = ["src/adt"]
 include = ["src/adt", "README.md", "LICENSE"]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py310"
 line-length = 88
 src = ["src", "tests"]
 
@@ -65,12 +67,16 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.10"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
 mypy_path = "src"
 packages = ["adt"]
+
+[[tool.mypy.overrides]]
+module = "jsonschema"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -85,5 +91,5 @@ branch = true
 omit = ["tests/*"]
 
 [tool.coverage.report]
-fail_under = 0
+fail_under = 80
 show_missing = true

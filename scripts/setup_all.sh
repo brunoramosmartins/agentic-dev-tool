@@ -17,6 +17,11 @@
 #   3. Issues — references labels and milestones
 #
 # All scripts are idempotent: safe to run multiple times.
+#
+# NOTE: If you already ran an older copy of these scripts from the repository
+# root before they were consolidated under scripts/, you do not need to undo
+# anything on GitHub—just run this file again; existing labels, milestones, and
+# issues are detected and skipped.
 # ==============================================================================
 
 set -euo pipefail

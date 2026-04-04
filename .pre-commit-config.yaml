@@ -15,6 +15,8 @@ repos:
           - typer>=0.9
           - rich>=13.0
           - types-setuptools
+          - jsonschema>=4.20
+          - openai>=1.0
         args: [--config-file=pyproject.toml]
         files: ^src/
 

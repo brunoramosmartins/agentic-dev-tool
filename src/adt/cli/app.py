@@ -26,8 +26,7 @@ def version_cmd() -> None:
 def info_cmd() -> None:
     """Print short bootstrap status (full CLI in Phase 2)."""
     typer.echo(
-        "adt Phase 0 — tooling and skeleton ready. "
-        "The `ask` command ships in Phase 2.",
+        "adt Phase 0 — tooling and skeleton ready. The `ask` command ships in Phase 2.",
     )
 
 

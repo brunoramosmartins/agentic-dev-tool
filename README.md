@@ -1,19 +1,19 @@
 # Agentic Dev Tool (adt)
 
 [![CI](https://github.com/brunoramosmartins/agentic-dev-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/brunoramosmartins/agentic-dev-tool/actions/workflows/ci.yml)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A context-oriented AI assistant CLI built with a simplified Model Context Protocol (MCP). The project is designed for extensibility, real-world engineering use, and professional demonstration.
 
 ## Status
 
-**Phase 0 — Project Bootstrap:** repository structure, tooling, and CI are in place. Application features land in later phases (see project planning docs if available locally).
+**Phase 1 — Core Infrastructure:** Pydantic models, LLM client, MCP layer (context, registry, executor), supervisor, runner, and stub agents are implemented. User-facing CLI flows land in Phase 2 (see local planning docs if you keep them outside git).
 
 ## Quick start (development)
 
 ```bash
-# Requires Python 3.11 or newer
+# Requires Python 3.10 or newer
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 make install

@@ -1,25 +1,131 @@
-# Agentic Dev Tool (adt)
+# Agentic Dev Tool (`adt`)
 
 [![CI](https://github.com/brunoramosmartins/agentic-dev-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/brunoramosmartins/agentic-dev-tool/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/agentic-dev-tool.svg)](https://pypi.org/project/agentic-dev-tool/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Context-oriented **CLI** (and optional **HTTP API**) for working with repositories, GitHub project data, and research sources—using OpenAI tool calling and an **MCP-style** in-process tool layer (registry, JSON Schema, bounded context packing with **tiktoken**).
+**Portfolio-grade CLI** (and optional **HTTP API**) that routes natural-language questions to **specialized agents**—repository analysis, GitHub project context, and technical research—backed by **OpenAI tool calling** and an **MCP-style** in-process layer: tool **registry**, **JSON Schema** validation, **tiktoken** budgets, ranked context, and disk cache.
 
-## Demo
+---
 
-Record a terminal session (e.g. [asciinema](https://asciinema.org/)) and link it here or in your portfolio. Suggested flow: `adt ask "…" --repo .`, then multi-repo `--repo a --repo b`, then `adt config show`. See [docs/portfolio.md](docs/portfolio.md).
+## Contents
 
-## Status (v1.0.0)
+- [Why this project](#why-this-project)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Quick start](#quick-start)
+- [Installation](#installation)
+- [Setup checklist (keys, env, secrets)](#setup-checklist-keys-env-secrets)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [HTTP API (optional)](#http-api-optional)
+- [Commands](#commands)
+- [Development](#development)
+- [Releasing (maintainers: PyPI + GitHub)](#releasing-maintainers-pypi--github)
+- [Portfolio checklist](#portfolio-checklist)
+- [Documentation](#documentation)
+- [License](#license)
 
-**Production release** on PyPI as **`agentic-dev-tool`**. Features: multi-repo **`--repo`**, **`compare_repos`**, hybrid **LLM + keyword routing**, **`~/.adt/config.toml`**, optional **`agent_chain`**, JSON logs, tree cache, and optional **`adt serve`** (FastAPI). Documentation: [docs/architecture.md](docs/architecture.md), [docs/mcp.md](docs/mcp.md), [docs/agents.md](docs/agents.md), [CHANGELOG.md](CHANGELOG.md).
+---
+
+## Why this project
+
+This repo demonstrates **agentic architecture** without a toy script: a real **Typer** CLI, **Pydantic** schemas, **hybrid routing** (LLM JSON classification + keyword fallback), **multi-repo** sessions, **CI** (Ruff, mypy, pytest, package smoke install), and an **optional FastAPI** surface. It maps to a full **phase roadmap** ([`ROADMAP.md`](ROADMAP.md)) from bootstrap through **v1.0.0** on PyPI.
+
+---
+
+## Features
+
+| Area | What you get |
+|------|----------------|
+| **Agents** | `repo_agent`, `project_agent`, `research_agent` with tool loops |
+| **Routing** | `HybridSupervisor`: cheap LLM JSON intent + rule fallback |
+| **Repos** | Multi `--repo`, `compare_repos`, tree cache, ranked files |
+| **GitHub** | Issues/milestones via API; optional PAT for rate limits |
+| **Research** | arXiv + HTTP fetch tools |
+| **Config** | `~/.adt/config.toml` + `adt config` |
+| **API** | `adt serve` — FastAPI `/healthz`, `/ask` ([`[api]`](https://pypi.org/project/agentic-dev-tool/) extra) |
+
+---
+
+## Architecture
+
+High-level data flow from terminal or HTTP into one shared pipeline (`adt.ask_session.run_ask`), then the runner, tools, and model.
+
+```mermaid
+flowchart TB
+  subgraph entry["Entry"]
+    CLI["Typer CLI<br/>adt ask · config · serve"]
+    HTTP["FastAPI optional<br/>POST /ask · GET /healthz"]
+  end
+
+  subgraph orch["Orchestration"]
+    ASK["ask_session.run_ask"]
+    BOOT["bootstrap.build_runner"]
+    HYB["HybridSupervisor<br/>LLM JSON + keyword rules"]
+    RUN["Runner<br/>chat + tool loop · budgets"]
+  end
+
+  subgraph mcp["MCP-style layer"]
+    REG["ToolRegistry"]
+    EXE["ExecutionController"]
+    CTX["ContextBuilder<br/>ranking · tiktoken · cache"]
+  end
+
+  subgraph agents["Agents"]
+    RA["repo_agent"]
+    PA["project_agent"]
+    RE["research_agent"]
+  end
+
+  LLM["LLMClient<br/>OpenAI"]
+
+  CLI --> ASK
+  HTTP --> ASK
+  ASK --> BOOT
+  BOOT --> HYB
+  BOOT --> RUN
+  BOOT --> REG
+  BOOT --> CTX
+  HYB --> RUN
+  RUN --> RA
+  RUN --> PA
+  RUN --> RE
+  RUN --> LLM
+  RUN --> EXE
+  EXE --> REG
+  CTX --> RUN
+```
+
+**Narrative:** the user’s query and repo hints become a `QueryRequest`; the supervisor picks an agent; `ContextBuilder` packs bounded context; the `Runner` chats with the model, executes **tool calls** through the registry/executor, and returns an `AgentResponse` (answer, tools used, routing metadata). The CLI renders **Rich** panels; the API returns JSON.
+
+Deeper design notes: [`docs/architecture.md`](docs/architecture.md) · tool contracts: [`docs/mcp.md`](docs/mcp.md) · agents/prompts: [`docs/agents.md`](docs/agents.md).
+
+---
+
+## Quick start
+
+```bash
+pip install agentic-dev-tool
+export OPENAI_API_KEY="sk-..."   # Windows PowerShell: $env:OPENAI_API_KEY="sk-..."
+adt ask "What does this codebase do?" --repo .
+```
+
+Optional GitHub-backed questions (better with a token):
+
+```bash
+export GITHUB_TOKEN="ghp_..."    # fine-grained or classic PAT with repo read
+adt ask "Summarize open issues" --repo owner/repo
+```
+
+---
 
 ## Installation
 
 Requires **Python 3.10+**.
 
-### From PyPI (users)
+### From PyPI
 
 ```bash
 pip install agentic-dev-tool
@@ -31,175 +137,237 @@ Optional HTTP API:
 ```bash
 pip install "agentic-dev-tool[api]"
 adt serve --port 8765
-# OpenAPI: http://127.0.0.1:8765/docs
+# Docs: http://127.0.0.1:8765/docs
 ```
 
 ### From source (contributors)
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-# optional: pre-commit install
+pre-commit install                 # optional
 ```
 
-Or with Make (Unix-like shell):
+With Make (Unix-like):
 
 ```bash
 make install
 ```
 
+---
+
+## Setup checklist (keys, env, secrets)
+
+Use this when polishing the project for **local use**, **CI**, and **publishing**.
+
+### 1. OpenAI API key (required for `adt ask` and `adt serve`)
+
+1. Create a key in the [OpenAI API platform](https://platform.openai.com/api-keys) (billing enabled as per your account).
+2. **Never commit keys.** Keep them out of git; `.env` is gitignored if you copy from [`.env.example`](.env.example).
+3. **Expose the key to the shell** before running `adt`:
+   - **macOS / Linux:** `export OPENAI_API_KEY="sk-..."`
+   - **Windows CMD:** `set OPENAI_API_KEY=sk-...`
+   - **Windows PowerShell:** `$env:OPENAI_API_KEY="sk-..."`
+4. **Optional:** put `OPENAI_API_KEY=...` in `.env` and load it with [direnv](https://direnv.net/), your IDE’s env loader, or manual `source`—the CLI does not auto-read `.env`; the process must see the variable.
+5. **GitHub Actions CI** in this repo **does not** use `OPENAI_API_KEY` (tests mock the API). You **do not** add this secret to GitHub for the default CI workflow.
+
+### 2. GitHub token (optional, for `project_agent`)
+
+1. Create a [Personal Access Token](https://github.com/settings/tokens) with read access to the repos you query (classic `repo` scope for private repos, or fine-grained “Contents/Issues read” as appropriate).
+2. Set `GITHUB_TOKEN` in the environment, or pass `--token` once on the CLI.
+3. Without a token, anonymous GitHub API limits apply (~60 requests/hour per IP).
+
+### 3. Persistent CLI settings
+
+1. Run `adt config show` — creates/uses **`~/.adt/config.toml`**.
+2. Override file defaults with `ADT_*` variables (see table below) when useful for CI or shells.
+
+### 4. Publishing to PyPI from GitHub (maintainers only)
+
+The workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) runs on tags `v*`.
+
+Pick **one** authentication method:
+
+| Method | What you do |
+|--------|-------------|
+| **Trusted publishing (recommended)** | In [pypi.org](https://pypi.org) → your project → **Publishing** → add a **trusted publisher** pointing at this GitHub repo and the `Release` workflow. The workflow already sets `id-token: write` for OIDC. Leave `PYPI_API_TOKEN` unset. |
+| **API token** | On PyPI, create an API token. In GitHub: **Settings → Secrets and variables → Actions → New repository secret** → name **`PYPI_API_TOKEN`**, value = the token. The publish action uses it as the password. |
+
+After the first successful publish, verify: `pip install agentic-dev-tool` and `adt version`.
+
+### 5. Tag and GitHub Release
+
+1. Merge release work to `main` with `version = "1.0.0"` (or next semver) in [`pyproject.toml`](pyproject.toml) and an entry in [`CHANGELOG.md`](CHANGELOG.md).
+2. Create an annotated tag: `git tag -a v1.0.0 -m "Release v1.0.0"` then `git push origin v1.0.0`.
+3. The **Release** workflow builds wheels, publishes to PyPI, and creates a GitHub Release (with generated release notes). You may edit the release description to paste the CHANGELOG section.
+
+---
+
 ## Configuration
 
-Copy the example env file and set your keys:
+Copy the template and fill values locally (do not commit `.env`):
 
 ```bash
 cp .env.example .env
-# Edit .env: OPENAI_API_KEY=..., optional GITHUB_TOKEN=...
 ```
-
-`adt` reads `OPENAI_API_KEY` from the process environment. Load `.env` with your shell or a tool such as [direnv](https://direnv.net/) if you use one.
-
-Persistent CLI defaults live in **`~/.adt/config.toml`** (see `adt config show`). Environment variables override file values when set.
-
-### Environment variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `OPENAI_API_KEY` | Yes, for `ask` | OpenAI API key for chat completions. |
-| `GITHUB_TOKEN` | No | GitHub PAT for `read_issues` / `read_milestones` (higher rate limits, private repos). |
-| `ADT_LIVE_MODEL` | No | Optional model override for `pytest -m live` (default `gpt-4o-mini`). |
-| `ADT_TOKEN_BUDGET` | No | Logical token window for one `ask` turn (default `16384`). |
-| `ADT_CACHE_TTL` | No | Repo tree cache TTL in seconds (default `300`). |
+| `OPENAI_API_KEY` | Yes, for `ask` / `serve` | OpenAI API key. |
+| `GITHUB_TOKEN` | No | PAT for `read_issues` / `read_milestones`. |
+| `ADT_LIVE_MODEL` | No | Model for `pytest -m live` (default `gpt-4o-mini`). |
+| `ADT_TOKEN_BUDGET` | No | Logical token window per ask (default `16384`). |
+| `ADT_CACHE_TTL` | No | Tree cache TTL in seconds (default `300`). |
 | `ADT_DEFAULT_MODEL` | No | Overrides `[adt] default_model` in config. |
 | `ADT_LOG_LEVEL` | No | Overrides config log level for file logging. |
-| `ADT_USE_LLM_ROUTING` | No | `0`/`1` — disable or enable LLM intent routing. |
-| `ADT_ROUTING_MODEL` | No | Model name for the routing JSON call. |
+| `ADT_USE_LLM_ROUTING` | No | `0` / `1` — LLM intent routing. |
+| `ADT_ROUTING_MODEL` | No | Model for routing JSON call. |
 | `ADT_MAX_TOOL_ITERATIONS` | No | Max LLM/tool rounds per agent step. |
+
+`adt config show` / `adt config set` manage **`~/.adt/config.toml`**. CLI flags and `ADT_*` override file defaults where documented in code.
+
+---
 
 ## Usage
 
-### Local repository (code analysis)
+### Local repository
 
 ```bash
 adt ask "What does this project do?" --repo .
 ```
 
-### Multi-repository (e.g. fork vs upstream)
+### Multi-repository
 
 ```bash
 adt ask "Compare dependency files in these two trees" --repo ./my-fork --repo ../upstream
 ```
 
-Each checkout gets a session id (`r0`, `r1`, …). Tools default to `r0` unless you pass **`repo_key`**. Use **`compare_repos`** for a structured tree/manifest diff.
+Checkouts get session ids (`r0`, `r1`, …). Use **`compare_repos`** for a structured diff.
 
 ### GitHub project (`owner/repo`)
 
-If `--repo` is a slug like `octocat/Hello-World` (and that path is **not** an existing folder), the CLI uses the **current working directory** as the **markdown root** for `read_markdown`, and sets the **default GitHub** target for the session context:
+If `--repo` is a slug like `octocat/Hello-World` and that path is not a local folder, the **current working directory** is the markdown root for `read_markdown`, and the slug sets the default GitHub target:
 
 ```bash
-cd ~/my-clone   # optional: where ROADMAP.md / README.md live
+cd ~/my-clone
 adt ask "Summarize open issues" --repo octocat/Hello-World
 adt ask "What milestones are open?" --repo myorg/my-repo --token ghp_xxx
 ```
 
-Without a token, unauthenticated calls are limited to about **60 requests/hour** per IP; the tools return a clear message when GitHub responds with **403** rate-limit errors.
-
-### Research (arXiv / web)
+### Research
 
 ```bash
 adt ask "Recent papers on retrieval augmented generation" --repo .
 ```
 
-### Force a specific agent
+### Force an agent
 
 ```bash
 adt ask "Explain src layout" --repo . --agent repo_agent
 adt ask "List issues" --repo myorg/repo --agent project_agent
 ```
 
-### Options
+### Common flags
 
-- `--repo`, `-r` — Repeatable. **Local directory** (must exist) **or** **`owner/repo`** slug. Slug form uses `cwd` as the markdown root for the first slug.
-- `--token` — GitHub PAT for this run (overrides `GITHUB_TOKEN` when set).
-- `--agent`, `-a` — `repo_agent`, `research_agent`, or `project_agent` (skips routing and **`agent_chain`**).
-- `--verbose`, `-v` — debug logging, last token usage, estimated token budget, and a truncated context summary.
-- `--log-level` — `DEBUG`, `INFO`, `WARNING`, or `ERROR` for JSON file logging (default from config; `--verbose` forces `DEBUG`).
-- `--no-cache` — skip reading/writing the repo tree cache for this run.
-- `--model`, `-m` — OpenAI model (default from **`~/.adt/config.toml`** or `gpt-4o-mini`).
+- `--repo`, `-r` — Repeatable: existing directory or `owner/repo` slug.
+- `--token` — GitHub PAT for this run (overrides `GITHUB_TOKEN`).
+- `--agent`, `-a` — `repo_agent`, `research_agent`, or `project_agent`.
+- `--verbose`, `-v` — Debug logging, token usage, budget hint, context snippet.
+- `--log-level` — `DEBUG` … `ERROR` for JSON file logs under `~/.adt/logs/`.
+- `--no-cache` — Skip repo tree cache.
+- `--model`, `-m` — Model override (default from config or `gpt-4o-mini`).
 
-### HTTP API (optional)
+---
 
-With `[api]` installed, **`adt serve`** binds to **127.0.0.1:8765** by default:
+## HTTP API (optional)
 
-- **`GET /healthz`** — liveness JSON (`status`, `version`).
-- **`POST /ask`** — JSON body: `query`, optional `repo` (list), `github_token`, `agent`, `no_cache`, `model`. Same orchestration as **`adt ask`**; requires **`OPENAI_API_KEY`** in the server environment.
-
-### Command summary
-
-| Command | Purpose |
-|--------|---------|
-| `adt ask …` | Main agent loop (routing, tools, answer). |
-| `adt serve` | Start FastAPI + uvicorn (`[api]` extra). |
-| `adt config show` / `path` / `set` | Manage `~/.adt/config.toml`. |
-| `adt version` | Package version. |
-| `adt info` | Short feature blurb. |
+Install `[api]`, then:
 
 ```bash
-adt --help
-adt ask --help
-adt serve --help
-adt config show
-adt config set default_model gpt-4o-mini
-adt version
-adt info
+adt serve --host 127.0.0.1 --port 8765
 ```
 
-## Architecture (overview)
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /healthz` | Liveness JSON (`status`, `version`). |
+| `POST /ask` | Body: `query`, optional `repo` (list), `github_token`, `agent`, `no_cache`, `model`. Same pipeline as CLI; **`OPENAI_API_KEY` must be set in the server environment**. |
 
-```text
-CLI / HTTP
-    → ask_session.run_ask
-    → build_runner (tools + HybridSupervisor + LLMClient + ContextBuilder)
-    → Runner (budget, context, chat + tool loop)
-    → AgentResponse
+---
+
+## Commands
+
+| Command | Purpose |
+|---------|---------|
+| `adt ask …` | Main agent loop. |
+| `adt serve` | FastAPI + uvicorn (`[api]`). |
+| `adt config show` / `path` / `set` | `~/.adt/config.toml`. |
+| `adt version` | Package version. |
+| `adt info` | Short feature summary. |
+
+```bash
+adt --help && adt ask --help && adt serve --help
 ```
 
-Details: [docs/architecture.md](docs/architecture.md). MCP-style tools: [docs/mcp.md](docs/mcp.md).
-
-### Example session (shape of output)
-
-You will see an **Agent:** line, an **Answer** panel (green text, cyan Markdown for research, magenta Markdown for project), and **Tools used** (e.g. `read_issues`, `read_milestones`, `read_markdown`, `read_repo_tree`). With `--verbose`, extra debug lines follow.
+---
 
 ## Development
 
 ```bash
-make lint      # ruff check
-make format    # ruff format
-make test      # pytest with coverage (excludes live LLM tests by default)
-make typecheck # mypy src/
-python -m build   # sdist + wheel into dist/ (requires `pip install build`)
+make lint       # ruff check
+make format     # ruff format
+make test       # pytest + coverage (excludes @pytest.mark.live)
+make typecheck  # mypy src/
+python -m build # sdist + wheel → dist/  (needs: pip install build)
 ```
 
-Default pytest runs exclude tests marked `@pytest.mark.live`. For live OpenAI (and real GitHub when tests call the network):
+Live model tests (manual / optional CI job you add yourself):
 
 ```bash
-export OPENAI_API_KEY=...
+export OPENAI_API_KEY="sk-..."
 pytest -m live
 ```
 
-## GitHub automation (optional)
+---
 
-If you use the [GitHub CLI](https://cli.github.com/) (`gh`) and want to provision **labels**, **milestones**, and **issues** (Phases 0–7) in one go, run from the repository root (Git Bash, WSL, or macOS/Linux):
+## Releasing (maintainers: PyPI + GitHub)
 
-```bash
-chmod +x scripts/*.sh
-./scripts/setup_all.sh
-```
+1. Bump **`pyproject.toml`** version and **`CHANGELOG.md`**.
+2. Merge to **`main`**.
+3. Tag **`vX.Y.Z`** and push the tag → **`Release`** workflow ([`release.yml`](.github/workflows/release.yml)).
+4. Configure PyPI **trusted publisher** or **`PYPI_API_TOKEN`** (see [Setup checklist §4](#4-publishing-to-pypi-from-github-maintainers-only)).
 
-- Scripts live only under `scripts/` and are **idempotent** (safe to re-run).
-- To remove GitHub’s default labels before creating the project set, run `setup_labels.sh` with `ADT_DELETE_DEFAULT_LABELS=1` (optional; can affect existing issues).
+Full contributor notes: [`docs/contributing.md`](docs/contributing.md).
+
+---
+
+## Portfolio checklist
+
+Aligned with **Phase 7** / [`docs/portfolio.md`](docs/portfolio.md):
+
+- [ ] Record a **terminal demo** ([asciinema](https://asciinema.org/) or similar): `adt ask`, multi-repo `--repo`, `adt config show`, optional `curl` to `/ask`.
+- [ ] **Embed or link** the demo in this README (replace the placeholder below).
+- [ ] Add a **one-paragraph** project card on your personal site with links to GitHub, PyPI, and `docs/architecture.md`.
+- [ ] Optional: short **article** (blog/LinkedIn)—problem, architecture, trade-offs.
+- [ ] Close or archive **GitHub milestones/issues** when you consider the roadmap complete.
+
+**Demo (placeholder — add your recording URL):** *Coming soon: asciinema / GIF link.*
+
+---
+
+## Documentation
+
+| Doc | Topic |
+|-----|--------|
+| [`ROADMAP.md`](ROADMAP.md) | Phases, milestones, conventions |
+| [`docs/architecture.md`](docs/architecture.md) | Design decisions, module map |
+| [`docs/mcp.md`](docs/mcp.md) | Tool registry, context, execution |
+| [`docs/agents.md`](docs/agents.md) | Agents and prompts |
+| [`docs/contributing.md`](docs/contributing.md) | PRs, packaging, PyPI |
+| [`CHANGELOG.md`](CHANGELOG.md) | Release history |
+
+---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [`LICENSE`](LICENSE).

@@ -2,26 +2,21 @@
 
 from __future__ import annotations
 
-import logging
-import os
 from importlib import metadata
-from typing import Annotated, Any
+from typing import Annotated
 
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from adt.bootstrap import build_runner
+from adt.ask_session import AskConfigurationError, run_ask
 from adt.config import (
     adt_config_path,
     apply_env_overrides,
     load_config_file,
     update_config_key,
 )
-from adt.logging.json_log import setup_adt_file_logging
-from adt.models.schemas import QueryRequest
-from adt.repo_spec import resolve_repo_targets
 
 app = typer.Typer(help="Agentic Dev Tool CLI", add_completion=False)
 config_app = typer.Typer(help="View or edit ~/.adt/config.toml", add_completion=False)
@@ -36,7 +31,7 @@ def _version_string() -> str:
     try:
         return metadata.version("agentic-dev-tool")
     except metadata.PackageNotFoundError:
-        return "0.7.0-dev"
+        return "1.0.0-dev"
 
 
 def _format_ask_panel(agent_name: str, answer: str) -> None:
@@ -84,9 +79,8 @@ def version_cmd() -> None:
 def info_cmd() -> None:
     """Print short project status and feature summary."""
     typer.echo(
-        "adt — Phase 6. ask: multi-repo --repo, compare_repos, LLM routing with "
-        "rule fallback, ~/.adt/config.toml (adt config show|set|path), optional "
-        "agent_chain. See docs/agents.md.",
+        "adt — v1.0.0 production: PyPI package, optional HTTP API (`adt serve`), "
+        "multi-repo ask, config.toml, LLM routing. Docs: README, docs/architecture.md.",
     )
 
 
@@ -135,9 +129,7 @@ def ask_cmd(
         typer.Option(
             "--repo",
             "-r",
-            help=(
-                "Local directory or owner/repo slug; repeat for multiple checkouts."
-            ),
+            help=("Local directory or owner/repo slug; repeat for multiple checkouts."),
         ),
     ] = None,
     token: Annotated[
@@ -186,14 +178,6 @@ def ask_cmd(
     ] = None,
 ) -> None:
     """Ask a question: supervisor picks an agent unless ``--agent`` is set."""
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        console.print(
-            "[red]Missing OPENAI_API_KEY.[/red] "
-            "Set it in the environment or in a `.env` file.",
-        )
-        raise typer.Exit(code=1)
-
     if agent is not None and agent not in _VALID_AGENTS:
         console.print(
             "[red]Invalid --agent.[/red] "
@@ -201,62 +185,21 @@ def ask_cmd(
         )
         raise typer.Exit(code=1)
 
-    cfg = apply_env_overrides(load_config_file())
-    eff_model = model if model is not None else cfg.default_model
-    eff_log = (log_level or cfg.log_level).upper()
-
-    repo_list = list(repo) if repo else ["."]
     try:
-        resolved = resolve_repo_targets(repo_list)
-    except ValueError as exc:
-        raise typer.BadParameter(str(exc)) from exc
-
-    primary_path = resolved.roots[resolved.primary_key]
-    extra_paths = [
-        str(p) for k, p in resolved.roots.items() if k != resolved.primary_key
-    ]
-
-    lvl = getattr(logging, eff_log, logging.INFO)
-    if verbose:
-        lvl = logging.DEBUG
-    setup_adt_file_logging(level=lvl)
-    logging.getLogger("adt").setLevel(lvl)
-
-    github_token = token.strip() if token else None
-    if not github_token:
-        env_gh = os.environ.get("GITHUB_TOKEN")
-        github_token = env_gh.strip() if env_gh else None
-
-    chain = cfg.agent_chain if cfg.agent_chain else None
-    runner = build_runner(
-        resolved.roots,
-        markdown_root=primary_path,
-        primary_repo_key=resolved.primary_key,
-        model=eff_model,
-        api_key=api_key,
-        github_token=github_token,
-        use_context_cache=not no_cache,
-        context_cache_ttl=cfg.cache_ttl_seconds,
-        token_budget_total=cfg.token_budget,
-        use_llm_routing=cfg.use_llm_routing,
-        routing_model=cfg.routing_model,
-        agent_chain=chain,
-        max_tool_iterations=cfg.max_tool_iterations,
-    )
-    opts: dict[str, Any] = {}
-    if no_cache:
-        opts["no_cache"] = True
-    request = QueryRequest(
-        query=query,
-        repo_path=str(primary_path),
-        additional_repo_paths=extra_paths,
-        github_owner=resolved.github_owner,
-        github_repo=resolved.github_repo,
-        force_agent=agent,
-        options=opts,
-    )
-    try:
-        response = runner.run(request)
+        exe = run_ask(
+            query=query,
+            repo=repo,
+            github_token=token,
+            force_agent=agent,
+            verbose=verbose,
+            log_level=log_level,
+            no_cache=no_cache,
+            model=model,
+            configure_logging=True,
+        )
+    except AskConfigurationError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
     except Exception as exc:  # noqa: BLE001 — last-resort CLI guard
         console.print(
             "[red]Unexpected error while running the agent.[/red] "
@@ -264,6 +207,8 @@ def ask_cmd(
         )
         raise typer.Exit(code=1) from exc
 
+    response = exe.response
+    runner = exe.runner
     routed = response.routed_agent or agent or "supervisor"
     console.print(f"[dim]Agent:[/dim] [bold]{routed}[/bold]")
     _format_ask_panel(response.routed_agent or agent or "", response.answer)
@@ -276,6 +221,32 @@ def ask_cmd(
         br = getattr(runner, "last_budget_report", None)
         if br:
             console.print(f"[dim]Token budget (estimated):[/dim] {br}")
+
+
+@app.command("serve")
+def serve_cmd(
+    host: Annotated[
+        str,
+        typer.Option("--host", help="Bind address (default 127.0.0.1)."),
+    ] = "127.0.0.1",
+    port: Annotated[
+        int,
+        typer.Option("--port", help="TCP port (default 8765)."),
+    ] = 8765,
+) -> None:
+    """Run the optional HTTP API (install ``agentic-dev-tool[api]`` first)."""
+    try:
+        import uvicorn
+    except ImportError:
+        console.print(
+            "[red]Missing API dependencies.[/red] "
+            "Install with: pip install 'agentic-dev-tool[api]'",
+        )
+        raise typer.Exit(code=1) from None
+    from adt.api.server import app as api_app
+
+    console.print(f"[dim]Open http://{host}:{port}/docs[/dim]")
+    uvicorn.run(api_app, host=host, port=port, log_level="info")
 
 
 if __name__ == "__main__":

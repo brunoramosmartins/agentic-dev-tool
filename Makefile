@@ -21,7 +21,7 @@ typecheck:
 	mypy src/
 
 run:
-	$(PYTHON) -m adt.cli.app --help
+	$(PYTHON) -m adt.cli.app ask --help
 
 clean:
 	rm -rf build dist *.egg-info .pytest_cache .mypy_cache .ruff_cache htmlcov .coverage

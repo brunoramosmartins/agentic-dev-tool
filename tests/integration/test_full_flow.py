@@ -19,6 +19,7 @@ def test_runner_tool_loop_then_answer(
     tool_registry,
     sample_repo_path: str,
 ) -> None:
+    """Model requests read_file; executor runs real tool; second turn returns text."""
     replies = [
         LLMMessage(
             role="assistant",
@@ -26,8 +27,8 @@ def test_runner_tool_loop_then_answer(
             tool_calls=[
                 ToolCall(
                     id="call_1",
-                    name="echo",
-                    arguments={"message": "ping"},
+                    name="read_file",
+                    arguments={"path": "main.py", "max_lines": 50},
                     agent="repo_agent",
                 ),
             ],
@@ -55,7 +56,7 @@ def test_runner_tool_loop_then_answer(
     req = QueryRequest(query="explain this file tree", repo_path=sample_repo_path)
     res = runner.run(req)
     assert res.answer == "Final synthesis."
-    assert "echo" in res.tools_used
+    assert "read_file" in res.tools_used
 
 
 def test_runner_max_iterations_stops(
@@ -64,8 +65,8 @@ def test_runner_max_iterations_stops(
     """LLM always requests a tool -> runner hits iteration cap."""
     tc = ToolCall(
         id="loop",
-        name="echo",
-        arguments={"message": "again"},
+        name="read_repo_tree",
+        arguments={"path": ".", "max_depth": 1},
         agent="repo_agent",
     )
     replies = [

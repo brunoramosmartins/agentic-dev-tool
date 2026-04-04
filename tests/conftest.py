@@ -6,33 +6,19 @@ from pathlib import Path
 
 import pytest
 
-from adt.mcp.registry import ToolDefinition, ToolRegistry
-
-
-def _echo_handler(message: str) -> str:
-    return f"echo:{message}"
+from adt.bootstrap import register_repo_tools
+from adt.mcp.registry import ToolRegistry
 
 
 @pytest.fixture
-def tool_registry() -> ToolRegistry:
+def tool_registry(sample_repo_path: str) -> ToolRegistry:
+    """A tool registry with repo tools bound to the sample fixture repository."""
     reg = ToolRegistry()
-    reg.register(
-        ToolDefinition(
-            name="echo",
-            description="Echo a string back to the model.",
-            parameters={
-                "type": "object",
-                "properties": {"message": {"type": "string"}},
-                "required": ["message"],
-                "additionalProperties": False,
-            },
-            allowed_agents=["repo_agent"],
-            handler=_echo_handler,
-        ),
-    )
+    register_repo_tools(reg, Path(sample_repo_path))
     return reg
 
 
 @pytest.fixture
 def sample_repo_path() -> str:
+    """Absolute path to the minimal sample repository under ``tests/fixtures``."""
     return str(Path(__file__).resolve().parent / "fixtures" / "sample_repo")

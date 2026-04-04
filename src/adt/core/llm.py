@@ -18,6 +18,7 @@ _RETRY_STATUS = frozenset({429, 500, 502, 503})
 
 
 def _messages_to_openai(messages: Sequence[LLMMessage]) -> list[dict[str, Any]]:
+    """Convert internal :class:`LLMMessage` objects to OpenAI chat message dicts."""
     out: list[dict[str, Any]] = []
     for m in messages:
         if m.role == "tool":
@@ -48,6 +49,7 @@ def _messages_to_openai(messages: Sequence[LLMMessage]) -> list[dict[str, Any]]:
 
 
 def _tool_calls_from_openai(raw: Any) -> list[ToolCall] | None:
+    """Parse provider tool call objects into :class:`ToolCall` models."""
     if not raw:
         return None
     calls: list[ToolCall] = []

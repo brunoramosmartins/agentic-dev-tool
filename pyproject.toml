@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-dev-tool"
-version = "1.0.0"
+version = "1.1.0"
 description = "Context-oriented AI CLI and optional HTTP API: agents, MCP-style tools, multi-repo, OpenAI."
 readme = "README.md"
 license = { text = "MIT" }

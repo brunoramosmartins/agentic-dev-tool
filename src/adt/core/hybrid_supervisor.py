@@ -12,6 +12,7 @@ from adt.models.schemas import QueryRequest, RoutedRequest
 
 if TYPE_CHECKING:
     from adt.core.llm import LLMClient
+    from adt.tracing.context import TraceContext
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +37,15 @@ class HybridSupervisor:
         llm: LLMClient | None,
         use_llm_routing: bool = True,
         routing_model: str | None = None,
+        trace: TraceContext | None = None,
     ) -> None:
         self._llm = llm
         self._use = use_llm_routing and llm is not None
         self._routing_model = routing_model or (
             llm.model if llm is not None else "gpt-4o-mini"
         )
-        self._rules = Supervisor()
+        self._trace = trace
+        self._rules = Supervisor(trace=trace)
 
     def route(self, request: QueryRequest) -> RoutedRequest:
         """Classify intent; fall back to keyword routing when LLM is off or errors."""
@@ -55,11 +58,28 @@ class HybridSupervisor:
             model=self._routing_model,
         )
         if agent is None:
-            return self._rules.route(request)
+            routed = self._rules.route(request)
+            if self._trace is not None:
+                self._trace.emit(
+                    "hybrid_supervisor",
+                    "routing_fallback",
+                    agent=routed.agent_name,
+                    reason="llm_classify_returned_none",
+                )
+            return routed
 
         enriched = request.model_copy(deep=True)
         enriched.options = {**enriched.options, "route": "llm_classifier"}
-        return RoutedRequest(agent_name=agent, request=enriched)
+        routed = RoutedRequest(agent_name=agent, request=enriched)
+        if self._trace is not None:
+            self._trace.emit(
+                "hybrid_supervisor",
+                "routing_decision",
+                agent=agent,
+                method="llm_classifier",
+                model=self._routing_model,
+            )
+        return routed
 
 
 def _llm_classify_agent(

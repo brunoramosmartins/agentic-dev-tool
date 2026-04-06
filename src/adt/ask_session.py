@@ -13,6 +13,7 @@ from adt.core.runner import Runner
 from adt.logging.json_log import setup_adt_file_logging
 from adt.models.schemas import AgentResponse, QueryRequest
 from adt.repo_spec import resolve_repo_targets
+from adt.tracing.context import TraceContext
 
 _VALID_AGENTS = frozenset({"repo_agent", "research_agent", "project_agent"})
 
@@ -27,6 +28,7 @@ class AskExecution:
 
     response: AgentResponse
     runner: Runner
+    trace_context: TraceContext | None = None
 
 
 def run_ask(
@@ -40,6 +42,7 @@ def run_ask(
     no_cache: bool = False,
     model: str | None = None,
     configure_logging: bool = True,
+    trace: bool = False,
 ) -> AskExecution:
     """Resolve repos, build a :class:`~adt.core.runner.Runner`, and run the query.
 
@@ -97,6 +100,8 @@ def run_ask(
         env_gh = os.environ.get("GITHUB_TOKEN")
         tok = env_gh.strip() if env_gh else None
 
+    trace_ctx = TraceContext() if trace else None
+
     chain = cfg.agent_chain if cfg.agent_chain else None
     runner = build_runner(
         resolved.roots,
@@ -112,6 +117,7 @@ def run_ask(
         routing_model=cfg.routing_model,
         agent_chain=chain,
         max_tool_iterations=cfg.max_tool_iterations,
+        trace=trace_ctx,
     )
     opts: dict[str, Any] = {}
     if no_cache:
@@ -126,4 +132,4 @@ def run_ask(
         options=opts,
     )
     response = runner.run(request)
-    return AskExecution(response=response, runner=runner)
+    return AskExecution(response=response, runner=runner, trace_context=trace_ctx)

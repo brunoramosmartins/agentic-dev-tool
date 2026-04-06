@@ -56,5 +56,8 @@ def setup_adt_file_logging(
 
 
 def log_adt(logger: logging.Logger, level: int, **fields: Any) -> None:
-    """Log a structured event using ``extra={\"adt\": fields}``."""
+    """Log a structured event using ``extra={\"adt\": fields}``.
+
+    Callers may include a ``trace_id`` key in *fields* for correlation.
+    """
     logger.log(level, "", extra={"adt": fields})

@@ -6,6 +6,15 @@ from abc import ABC, abstractmethod
 
 from adt.models.schemas import AgentResponse, QueryRequest
 
+SHARED_DIRECTIVES = """
+## Communication rules
+- Always reply in the same language the user used in their question.
+- Be technical, precise, and direct. No filler, no generic advice.
+- Do not add pleasantries, motivational closings, or "let me know if you need
+  anything" lines. End when the information is delivered.
+- Use markdown sparingly: headers only for distinct sections, not decoration.
+""".strip()
+
 
 class BaseAgent(ABC):
     """Contract: system prompt, declared tool names, and a handle entrypoint.

@@ -183,6 +183,13 @@ def ask_cmd(
             help="OpenAI chat model (default: config default_model).",
         ),
     ] = None,
+    trace: Annotated[
+        bool,
+        typer.Option(
+            "--trace",
+            help="Show request trace: routing, context, LLM calls, cost estimate.",
+        ),
+    ] = False,
 ) -> None:
     """Ask a question: supervisor picks an agent unless ``--agent`` is set."""
     if agent is not None and agent not in _VALID_AGENTS:
@@ -203,6 +210,7 @@ def ask_cmd(
             no_cache=no_cache,
             model=model,
             configure_logging=True,
+            trace=trace,
         )
     except AskConfigurationError as exc:
         console.print(f"[red]{exc}[/red]")
@@ -221,6 +229,11 @@ def ask_cmd(
     _format_ask_panel(response.routed_agent or agent or "", response.answer)
     tools_line = ", ".join(response.tools_used) if response.tools_used else "none"
     console.print(f"[dim]Tools used:[/dim] {tools_line}")
+    if exe.trace_context is not None:
+        from adt.tracing.renderer import TraceRenderer
+
+        eff_model = model or "gpt-4o-mini"
+        TraceRenderer(console).render(exe.trace_context, model=eff_model)
     if verbose:
         console.print(f"[dim]Last LLM token usage:[/dim] {runner.last_token_usage}")
         ctx = response.context_summary

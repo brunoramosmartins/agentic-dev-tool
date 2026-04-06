@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from adt.agents.base import BaseAgent
+
+if TYPE_CHECKING:
+    from adt.tracing.context import TraceContext
 from adt.agents.project_agent import ProjectAgent
 from adt.agents.repo_agent import RepoAgent
 from adt.agents.research_agent import ResearchAgent
@@ -469,6 +472,7 @@ def build_runner(
     use_llm_routing: bool = True,
     routing_model: str | None = None,
     agent_chain: list[str] | None = None,
+    trace: TraceContext | None = None,
 ) -> Runner:
     """Construct a :class:`~adt.core.runner.Runner` for the full agent/tool set.
 
@@ -513,6 +517,7 @@ def build_runner(
         llm=llm,
         use_llm_routing=use_llm_routing,
         routing_model=routing_model,
+        trace=trace,
     )
     ttl = context_cache_ttl if context_cache_ttl is not None else default_cache_ttl()
     context = ContextBuilder(
@@ -520,6 +525,7 @@ def build_runner(
         use_repo_tree_cache=use_context_cache,
         cache_ttl_seconds=ttl,
         total_token_budget=token_budget_total,
+        trace=trace,
     )
     executor = ExecutionController(registry)
     agents: dict[str, BaseAgent] = {
@@ -537,6 +543,7 @@ def build_runner(
         max_tool_iterations=max_tool_iterations,
         repo_roots=roots_map,
         agent_chain=list(agent_chain or []),
+        trace=trace,
     )
 
 

@@ -26,6 +26,7 @@ from adt.models.schemas import (
 if TYPE_CHECKING:
     from adt.core.hybrid_supervisor import HybridSupervisor
     from adt.core.supervisor import Supervisor
+    from adt.tracing.context import TraceContext
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ class Runner:
         max_tool_iterations: int = 5,
         repo_roots: dict[str, Path] | None = None,
         agent_chain: list[str] | None = None,
+        trace: TraceContext | None = None,
     ) -> None:
         self._supervisor = supervisor
         self._llm = llm
@@ -68,6 +70,7 @@ class Runner:
         self._repo_roots: dict[str, Path] = dict(repo_roots or {})
         self._agent_chain: list[str] = list(agent_chain or [])
         self.last_budget_report: dict[str, Any] = {}
+        self._trace = trace
 
     @property
     def last_token_usage(self) -> dict[str, int]:
@@ -250,7 +253,7 @@ class Runner:
             force_agent=routed.request.force_agent,
         )
 
-        for _ in range(self._max_tool_iterations):
+        for iteration in range(self._max_tool_iterations):
             try:
                 reply = self._llm.chat(
                     messages,
@@ -277,6 +280,21 @@ class Runner:
                     routed_agent=routed.agent_name,
                 )
 
+            usage = self.last_token_usage
+            if self._trace is not None:
+                self._trace.emit(
+                    "runner",
+                    "llm_call",
+                    iteration=iteration,
+                    message_count=len(messages),
+                    has_tool_calls=bool(reply.tool_calls),
+                    **usage,
+                )
+                self._trace.add_token_usage(
+                    prompt_tokens=usage.get("prompt_tokens", 0),
+                    completion_tokens=usage.get("completion_tokens", 0),
+                )
+
             if reply.tool_calls:
                 assistant_tc = [
                     ToolCall(
@@ -295,7 +313,9 @@ class Runner:
                     ),
                 )
                 for tc in assistant_tc:
+                    tc_start = time.perf_counter()
                     result = self._executor.execute(tc)
+                    tc_duration = round((time.perf_counter() - tc_start) * 1000, 2)
                     tools_used.append(tc.name)
                     log_adt(
                         logger,
@@ -304,6 +324,15 @@ class Runner:
                         tool=tc.name,
                         success=result.success,
                     )
+                    if self._trace is not None:
+                        self._trace.emit(
+                            "runner",
+                            "tool_call",
+                            iteration=iteration,
+                            tool=tc.name,
+                            success=result.success,
+                            duration_ms=tc_duration,
+                        )
                     messages.append(
                         LLMMessage(
                             role="tool",
@@ -316,7 +345,6 @@ class Runner:
                 continue
 
             elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
-            usage = self.last_token_usage
             log_adt(
                 logger,
                 logging.INFO,
@@ -326,6 +354,15 @@ class Runner:
                 tools_used=tools_used,
                 **usage,
             )
+            if self._trace is not None:
+                self._trace.emit(
+                    "runner",
+                    "request_completed",
+                    agent=routed.agent_name,
+                    total_elapsed_ms=elapsed_ms,
+                    tools_used=tools_used,
+                    iterations=iteration + 1,
+                )
             return AgentResponse(
                 answer=reply.content.strip(),
                 tools_used=tools_used,

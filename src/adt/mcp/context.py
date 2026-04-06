@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from adt.tracing.context import TraceContext
 
 from adt.mcp.budget import read_total_budget_from_environ
 from adt.mcp.cache import RepoTreeCache
@@ -56,6 +60,7 @@ class ContextBuilder:
         cache_ttl_seconds: float | None = None,
         cache_dir: Path | None = None,
         total_token_budget: int | None = None,
+        trace: TraceContext | None = None,
     ) -> None:
         """Configure encoding, optional tree cache, and default total budget.
 
@@ -81,6 +86,7 @@ class ContextBuilder:
             if total_token_budget is not None
             else read_total_budget_from_environ()
         )
+        self._trace = trace
 
     @property
     def total_token_budget(self) -> int:
@@ -166,6 +172,18 @@ class ContextBuilder:
 
         candidates = self._iter_text_files(root, max_depth=max_depth)
         ranked = sort_paths_by_relevance(candidates, root, keywords)[:max_files]
+
+        if self._trace is not None:
+            self._trace.emit(
+                "context_builder",
+                "context_build",
+                files_scanned=len(candidates),
+                files_selected=len(ranked),
+                keywords=keywords,
+                budget_tokens=ctx_budget,
+                cache_hit=use_cache and self._tree_cache is not None,
+                source_label=source_label,
+            )
 
         header = "\n".join(lines)
         used = count_tokens(header, self._enc)

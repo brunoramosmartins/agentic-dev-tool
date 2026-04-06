@@ -42,3 +42,8 @@ Thumbs.db
 
 # Project-local planning at repo root only (fixture copy under tests/ is tracked)
 /ROADMAP.md
+/ROADMAP_EXTENSION.MD
+
+
+/CLAUDE.md
+/.claude

@@ -11,6 +11,8 @@ Role = Literal["system", "user", "assistant", "tool"]
 
 Mode = Literal["execution", "supervised"]
 Level = Literal["beginner", "intermediate", "advanced"]
+Severity = Literal["error", "warning", "suggestion"]
+Assessment = Literal["needs_work", "on_track", "excellent"]
 
 
 class QueryRequest(BaseModel):
@@ -219,4 +221,51 @@ class SupervisedResponse(BaseModel):
     progress_note: str = Field(
         default="",
         description="Brief, specific note on what comes next (not generic praise).",
+    )
+
+
+class CodeIssue(BaseModel):
+    """A specific issue found in the user's code during supervised review."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    line: int | None = Field(
+        default=None,
+        description="1-based line number where the issue is; None if file-wide.",
+    )
+    severity: Severity = Field(
+        ...,
+        description="error (blocks correctness), warning (risky), suggestion (polish).",
+    )
+    description: str = Field(..., description="What is wrong, in concrete terms.")
+    fix_hint: str = Field(
+        default="",
+        description="Nudge toward the fix without revealing the full solution.",
+    )
+
+
+class ReviewFeedback(BaseModel):
+    """Structured feedback from a supervised code review."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    issues: list[CodeIssue] = Field(
+        default_factory=list,
+        description="Specific issues found in the submitted code.",
+    )
+    improvements: list[str] = Field(
+        default_factory=list,
+        description="Non-blocking improvements the user could apply next.",
+    )
+    strengths: list[str] = Field(
+        default_factory=list,
+        description="What the user did well (specific, not generic praise).",
+    )
+    next_step: str = Field(
+        default="",
+        description="Concrete action the user should take after addressing feedback.",
+    )
+    overall_assessment: Assessment = Field(
+        ...,
+        description="High-level verdict: needs_work, on_track, or excellent.",
     )

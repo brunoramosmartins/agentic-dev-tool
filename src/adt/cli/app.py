@@ -17,6 +17,7 @@ from adt.config import (
     load_config_file,
     update_config_key,
 )
+from adt.review_session import ReviewConfigurationError, run_review
 
 app = typer.Typer(help="Agentic Dev Tool CLI", add_completion=False)
 config_app = typer.Typer(help="View or edit ~/.adt/config.toml", add_completion=False)
@@ -280,6 +281,88 @@ def ask_cmd(
         br = getattr(runner, "last_budget_report", None)
         if br:
             console.print(f"[dim]Token budget (estimated):[/dim] {br}")
+
+
+@app.command("review")
+def review_cmd(
+    file: Annotated[
+        str,
+        typer.Argument(help="Path to the source file to review."),
+    ],
+    context: Annotated[
+        str | None,
+        typer.Option(
+            "--context",
+            "-c",
+            help="Optional description of what the code should do.",
+        ),
+    ] = None,
+    level: Annotated[
+        str,
+        typer.Option(
+            "--level",
+            help="Difficulty level for the reviewer: beginner, intermediate, advanced.",
+        ),
+    ] = "intermediate",
+    model: Annotated[
+        str | None,
+        typer.Option(
+            "--model",
+            "-m",
+            help="OpenAI chat model (default: config default_model).",
+        ),
+    ] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option("--verbose", "-v", help="Print debug logs."),
+    ] = False,
+) -> None:
+    """Review a source file in supervised mode and print structured feedback."""
+    valid_levels = {"beginner", "intermediate", "advanced"}
+    if level not in valid_levels:
+        console.print(
+            f"[red]Invalid --level {level!r}.[/red] "
+            f"Choose one of: {', '.join(sorted(valid_levels))}.",
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        result = run_review(
+            file=file,
+            extra_context=context,
+            level=level,
+            model=model,
+            verbose=verbose,
+        )
+    except ReviewConfigurationError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:  # noqa: BLE001 — last-resort CLI guard
+        console.print(
+            "[red]Unexpected error while running the reviewer.[/red] "
+            f"({type(exc).__name__}: {exc})",
+        )
+        raise typer.Exit(code=1) from exc
+
+    if result.feedback is None:
+        console.print(
+            Panel(
+                result.raw_answer or "(empty response)",
+                title="Code Review (raw)",
+                border_style="red",
+                title_align="left",
+            ),
+        )
+        raise typer.Exit(code=1)
+
+    from adt.cli.review_renderer import ReviewRenderer
+
+    ReviewRenderer(console).render(result.feedback)
+    if result.session.problem_summary:
+        console.print(
+            f"[dim]Session:[/dim] step {result.session.current_step}/"
+            f"{result.session.total_steps} — {result.session.problem_summary}",
+        )
 
 
 @app.command("serve")

@@ -11,7 +11,7 @@ from adt.bootstrap import build_runner
 from adt.config import apply_env_overrides, load_config_file
 from adt.core.runner import Runner
 from adt.logging.json_log import setup_adt_file_logging
-from adt.models.schemas import AgentResponse, QueryRequest
+from adt.models.schemas import AgentResponse, QueryRequest, SupervisedResponse
 from adt.repo_spec import resolve_repo_targets
 from adt.tracing.context import TraceContext
 
@@ -29,6 +29,7 @@ class AskExecution:
     response: AgentResponse
     runner: Runner
     trace_context: TraceContext | None = None
+    supervised_response: SupervisedResponse | None = None
 
 
 def run_ask(
@@ -43,6 +44,8 @@ def run_ask(
     model: str | None = None,
     configure_logging: bool = True,
     trace: bool = False,
+    mode: str = "execution",
+    level: str = "intermediate",
 ) -> AskExecution:
     """Resolve repos, build a :class:`~adt.core.runner.Runner`, and run the query.
 
@@ -130,6 +133,20 @@ def run_ask(
         github_repo=resolved.github_repo,
         force_agent=force_agent,
         options=opts,
+        mode=mode,  # type: ignore[arg-type]
+        level=level,  # type: ignore[arg-type]
     )
     response = runner.run(request)
-    return AskExecution(response=response, runner=runner, trace_context=trace_ctx)
+
+    supervised_resp: SupervisedResponse | None = None
+    if mode == "supervised":
+        from adt.core.supervised_supervisor import parse_supervised_response
+
+        supervised_resp = parse_supervised_response(response.answer)
+
+    return AskExecution(
+        response=response,
+        runner=runner,
+        trace_context=trace_ctx,
+        supervised_response=supervised_resp,
+    )

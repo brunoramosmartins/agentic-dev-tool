@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from adt.agents.base import BaseAgent
+from adt.core.mode_router import ModeRouter
+from adt.core.supervised_supervisor import build_supervised_system_prompt
 from adt.logging.json_log import log_adt
 from adt.mcp.budget import allocate_budget
 from adt.mcp.context import ContextBuilder
@@ -83,6 +85,10 @@ class Runner:
     def run(self, request: QueryRequest) -> AgentResponse:
         """Route the query, build context, run the LLM/tool loop, return an answer."""
         use_cache = not bool(request.options.get("no_cache", False))
+
+        if ModeRouter.is_supervised(request):
+            return self._run_supervised(request, use_cache=use_cache)
+
         if self._agent_chain and request.force_agent is None:
             return self._run_agent_chain(request, use_cache=use_cache)
 
@@ -102,6 +108,98 @@ class Runner:
         else:
             routed = self._supervisor.route(request)
         return self._execute_routed(routed, use_cache=use_cache)
+
+    def _run_supervised(
+        self,
+        request: QueryRequest,
+        *,
+        use_cache: bool,
+    ) -> AgentResponse:
+        """Run supervised mode: single LLM call with teaching prompt, no tools."""
+        t0 = time.perf_counter()
+        sys_prompt = build_supervised_system_prompt(request.level)
+
+        # Build minimal context if a repo is available
+        paths = request.effective_repo_paths()
+        if paths:
+            raw_context = self._context.build_from_repo(
+                paths[0], query=request.query, use_cache=use_cache
+            )
+        else:
+            raw_context = ""
+
+        user_content = f"{raw_context}\n\nUser question:\n{request.query.strip()}\n"
+        messages: list[LLMMessage] = [
+            LLMMessage(role="system", content=sys_prompt),
+            LLMMessage(role="user", content=user_content),
+        ]
+
+        if self._trace is not None:
+            self._trace.emit(
+                "runner",
+                "supervised_start",
+                level=request.level,
+            )
+
+        log_adt(
+            logger,
+            logging.INFO,
+            event="supervised_mode",
+            supervised_level=request.level,
+            query_preview=request.query[:500],
+        )
+
+        try:
+            reply = self._llm.chat(messages, None)
+        except Exception as exc:  # noqa: BLE001
+            log_adt(
+                logger,
+                logging.ERROR,
+                event="llm_failure",
+                error=str(exc),
+                error_type=type(exc).__name__,
+                agent="supervised",
+            )
+            return AgentResponse(
+                answer=(
+                    f"LLM request failed ({type(exc).__name__}: {exc}). "
+                    "Check OPENAI_API_KEY, network, and quota."
+                ),
+                tools_used=[],
+                context_summary="",
+                routed_agent="supervised",
+            )
+
+        usage = self.last_token_usage
+        if self._trace is not None:
+            self._trace.emit("runner", "llm_call", iteration=0, **usage)
+            self._trace.add_token_usage(
+                prompt_tokens=usage.get("prompt_tokens", 0),
+                completion_tokens=usage.get("completion_tokens", 0),
+            )
+
+        elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
+        log_adt(
+            logger,
+            logging.INFO,
+            event="supervised_completed",
+            duration_ms=elapsed_ms,
+            **usage,
+        )
+        if self._trace is not None:
+            self._trace.emit(
+                "runner",
+                "request_completed",
+                agent="supervised",
+                total_elapsed_ms=elapsed_ms,
+            )
+
+        return AgentResponse(
+            answer=reply.content.strip(),
+            tools_used=[],
+            context_summary="",
+            routed_agent="supervised",
+        )
 
     def _run_agent_chain(
         self,

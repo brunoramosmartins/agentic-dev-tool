@@ -10,6 +10,7 @@ from typing import Any
 from adt.bootstrap import build_runner
 from adt.config import apply_env_overrides, load_config_file
 from adt.core.runner import Runner
+from adt.core.session import SessionContext
 from adt.logging.json_log import setup_adt_file_logging
 from adt.models.schemas import AgentResponse, QueryRequest, SupervisedResponse
 from adt.repo_spec import resolve_repo_targets
@@ -143,6 +144,10 @@ def run_ask(
         from adt.core.supervised_supervisor import parse_supervised_response
 
         supervised_resp = parse_supervised_response(response.answer)
+        if supervised_resp is not None:
+            sess = SessionContext.load()
+            sess.update_from_supervised(supervised_resp)
+            sess.save()
 
     return AskExecution(
         response=response,

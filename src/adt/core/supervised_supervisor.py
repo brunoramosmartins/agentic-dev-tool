@@ -13,6 +13,14 @@ from adt.models.schemas import (
     SupervisedResponse,
     SupervisedStep,
 )
+from adt.skills.supervised_engineering import load_skill_content
+
+_SKILL_HEADER = (
+    "## Skill: Supervised Engineering\n"
+    "The heuristics below define how you decompose problems and give "
+    "feedback. Treat them as binding rules, not suggestions.\n\n"
+)
+_SKILL_SEPARATOR = "\n\n---\n\n"
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +67,21 @@ The user's difficulty level is: {level}
 """
 
 
-def build_supervised_system_prompt(level: str) -> str:
-    """Return the system prompt with the difficulty level interpolated."""
-    return _SUPERVISED_SYSTEM_PROMPT.format(level=level)
+def build_supervised_system_prompt(
+    level: str,
+    *,
+    skill_content: str | None = None,
+) -> str:
+    """Return the system prompt with skill heuristics and difficulty interpolated.
+
+    Args:
+        level: Difficulty level (``beginner`` / ``intermediate`` / ``advanced``).
+        skill_content: Optional override for the supervised engineering skill
+            body. When ``None``, the packaged ``SKILL.md`` is loaded at runtime.
+    """
+    skill = skill_content if skill_content is not None else load_skill_content()
+    base = _SUPERVISED_SYSTEM_PROMPT.format(level=level)
+    return _SKILL_HEADER + skill + _SKILL_SEPARATOR + base
 
 
 def parse_supervised_response(raw_answer: str) -> SupervisedResponse | None:
@@ -168,9 +188,21 @@ The user's difficulty level is: {level}
 """
 
 
-def build_review_system_prompt(level: str) -> str:
-    """Return the code review system prompt with the difficulty level interpolated."""
-    return _REVIEW_SYSTEM_PROMPT.format(level=level)
+def build_review_system_prompt(
+    level: str,
+    *,
+    skill_content: str | None = None,
+) -> str:
+    """Return the review system prompt with skill heuristics and level embedded.
+
+    Args:
+        level: Difficulty level (``beginner`` / ``intermediate`` / ``advanced``).
+        skill_content: Optional override for the supervised engineering skill
+            body. When ``None``, the packaged ``SKILL.md`` is loaded at runtime.
+    """
+    skill = skill_content if skill_content is not None else load_skill_content()
+    base = _REVIEW_SYSTEM_PROMPT.format(level=level)
+    return _SKILL_HEADER + skill + _SKILL_SEPARATOR + base
 
 
 def build_review_user_prompt(

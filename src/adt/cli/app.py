@@ -190,8 +190,39 @@ def ask_cmd(
             help="Show request trace: routing, context, LLM calls, cost estimate.",
         ),
     ] = False,
+    mode: Annotated[
+        str,
+        typer.Option(
+            "--mode",
+            help=(
+                "Operational mode: 'execution' (default) solves tasks; "
+                "'supervised' guides step-by-step for learning."
+            ),
+        ),
+    ] = "execution",
+    level: Annotated[
+        str,
+        typer.Option(
+            "--level",
+            help="Difficulty for supervised mode: beginner, intermediate, advanced.",
+        ),
+    ] = "intermediate",
 ) -> None:
     """Ask a question: supervisor picks an agent unless ``--agent`` is set."""
+    valid_modes = {"execution", "supervised"}
+    if mode not in valid_modes:
+        console.print(
+            f"[red]Invalid --mode {mode!r}.[/red] "
+            f"Choose one of: {', '.join(sorted(valid_modes))}.",
+        )
+        raise typer.Exit(code=1)
+    valid_levels = {"beginner", "intermediate", "advanced"}
+    if level not in valid_levels:
+        console.print(
+            f"[red]Invalid --level {level!r}.[/red] "
+            f"Choose one of: {', '.join(sorted(valid_levels))}.",
+        )
+        raise typer.Exit(code=1)
     if agent is not None and agent not in _VALID_AGENTS:
         console.print(
             "[red]Invalid --agent.[/red] "
@@ -211,6 +242,8 @@ def ask_cmd(
             model=model,
             configure_logging=True,
             trace=trace,
+            mode=mode,
+            level=level,
         )
     except AskConfigurationError as exc:
         console.print(f"[red]{exc}[/red]")
@@ -226,7 +259,13 @@ def ask_cmd(
     runner = exe.runner
     routed = response.routed_agent or agent or "supervisor"
     console.print(f"[dim]Agent:[/dim] [bold]{routed}[/bold]")
-    _format_ask_panel(response.routed_agent or agent or "", response.answer)
+
+    if exe.supervised_response is not None:
+        from adt.cli.supervised_renderer import SupervisedRenderer
+
+        SupervisedRenderer(console).render(exe.supervised_response)
+    else:
+        _format_ask_panel(response.routed_agent or agent or "", response.answer)
     tools_line = ", ".join(response.tools_used) if response.tools_used else "none"
     console.print(f"[dim]Tools used:[/dim] {tools_line}")
     if exe.trace_context is not None:

@@ -9,12 +9,24 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 Role = Literal["system", "user", "assistant", "tool"]
 
 
+Mode = Literal["execution", "supervised"]
+Level = Literal["beginner", "intermediate", "advanced"]
+
+
 class QueryRequest(BaseModel):
     """User query and optional repository context for a single agent run."""
 
     model_config = ConfigDict(extra="forbid")
 
     query: str = Field(..., description="Natural language question or instruction.")
+    mode: Mode = Field(
+        default="execution",
+        description="Operational mode: execution (default) or supervised (guided).",
+    )
+    level: Level = Field(
+        default="intermediate",
+        description="Difficulty level for supervised mode guidance.",
+    )
     repo_path: str | None = Field(
         default=None,
         description=(
@@ -168,4 +180,43 @@ class RoutedRequest(BaseModel):
     request: QueryRequest = Field(
         ...,
         description="Original or enriched request (options may hold routing metadata).",
+    )
+
+
+class SupervisedStep(BaseModel):
+    """A single guided step in the supervised learning flow."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    step_number: int = Field(..., description="1-based index of this step.")
+    goal: str = Field(..., description="What the user should achieve in this step.")
+    requirements: list[str] = Field(
+        default_factory=list,
+        description="Concrete deliverables or acceptance criteria.",
+    )
+    hints: list[str] = Field(
+        default_factory=list,
+        description="Optional nudges without revealing the solution.",
+    )
+    questions: list[str] = Field(
+        default_factory=list,
+        description="Reflective questions to deepen understanding.",
+    )
+
+
+class SupervisedResponse(BaseModel):
+    """Structured response from supervised mode with the current guided step."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    problem_summary: str = Field(
+        ..., description="Concise restatement of the problem to solve."
+    )
+    current_step: SupervisedStep = Field(
+        ..., description="The step the user should work on now."
+    )
+    total_steps: int = Field(..., description="Total number of planned steps.", ge=1)
+    progress_note: str = Field(
+        default="",
+        description="Brief, specific note on what comes next (not generic praise).",
     )

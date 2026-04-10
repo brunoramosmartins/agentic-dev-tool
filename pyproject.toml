@@ -78,6 +78,10 @@ Issues = "https://github.com/brunoramosmartins/agentic-dev-tool/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/adt"]
+include = [
+  "src/adt/**/*.py",
+  "src/adt/**/*.md",
+]
 
 [tool.hatch.build.targets.sdist]
 include = [

@@ -63,3 +63,30 @@ def test_renderer_skips_empty_sections() -> None:
     assert "Requirements" not in out
     assert "Hints" not in out
     assert "Questions" not in out
+
+
+def test_renderer_shows_level_in_header_and_title() -> None:
+    con = _make_console()
+    SupervisedRenderer(con).render(_sample_response(), level="beginner")
+    out = con.file.getvalue()  # type: ignore[union-attr]
+    assert "Level" in out
+    assert "Beginner" in out
+    assert "Supervised Mode" in out
+    # Title should include the level label
+    assert "Beginner" in out
+
+
+def test_renderer_advanced_level_label() -> None:
+    con = _make_console()
+    SupervisedRenderer(con).render(_sample_response(), level="advanced")
+    out = con.file.getvalue()  # type: ignore[union-attr]
+    assert "Advanced" in out
+
+
+def test_renderer_without_level_omits_label() -> None:
+    con = _make_console()
+    SupervisedRenderer(con).render(_sample_response())
+    out = con.file.getvalue()  # type: ignore[union-attr]
+    assert "Level:" not in out
+    # Default title still present
+    assert "Supervised Mode" in out

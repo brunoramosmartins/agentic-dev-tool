@@ -107,10 +107,7 @@ def run_review(
     if llm is None:
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
-            msg = (
-                "Missing OPENAI_API_KEY. Set it in the environment or in a "
-                "`.env` file."
-            )
+            msg = "Missing OPENAI_API_KEY. Set it in the environment or in a .env file."
             raise ReviewConfigurationError(msg)
         llm = LLMClient(model=eff_model, api_key=api_key)
 

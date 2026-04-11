@@ -31,6 +31,7 @@ class AskExecution:
     runner: Runner
     trace_context: TraceContext | None = None
     supervised_response: SupervisedResponse | None = None
+    supervised_level: str | None = None
 
 
 def run_ask(
@@ -154,4 +155,5 @@ def run_ask(
         runner=runner,
         trace_context=trace_ctx,
         supervised_response=supervised_resp,
+        supervised_level=level if mode == "supervised" else None,
     )

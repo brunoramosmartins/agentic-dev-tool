@@ -6,9 +6,11 @@ import json
 import logging
 from typing import Any
 
+from adt.core.level_config import format_level_directives, get_level_config
 from adt.logging.json_log import log_adt
 from adt.models.schemas import (
     CodeIssue,
+    Level,
     ReviewFeedback,
     SupervisedResponse,
     SupervisedStep,
@@ -72,7 +74,7 @@ def build_supervised_system_prompt(
     *,
     skill_content: str | None = None,
 ) -> str:
-    """Return the system prompt with skill heuristics and difficulty interpolated.
+    """Return the system prompt with skill, level directives, and difficulty.
 
     Args:
         level: Difficulty level (``beginner`` / ``intermediate`` / ``advanced``).
@@ -80,8 +82,24 @@ def build_supervised_system_prompt(
             body. When ``None``, the packaged ``SKILL.md`` is loaded at runtime.
     """
     skill = skill_content if skill_content is not None else load_skill_content()
+    cfg = get_level_config(_coerce_level(level))
+    directives = format_level_directives(cfg)
     base = _SUPERVISED_SYSTEM_PROMPT.format(level=level)
-    return _SKILL_HEADER + skill + _SKILL_SEPARATOR + base
+    return (
+        _SKILL_HEADER + skill + _SKILL_SEPARATOR + directives + _SKILL_SEPARATOR + base
+    )
+
+
+def _coerce_level(level: str) -> Level:
+    """Narrow an arbitrary string to a valid :data:`Level` literal.
+
+    Unknown values fall back to ``intermediate`` so prompt building never
+    raises; schema validation at the :class:`QueryRequest` boundary already
+    rejects invalid levels before they reach the supervisor.
+    """
+    if level in ("beginner", "intermediate", "advanced"):
+        return level  # type: ignore[return-value]
+    return "intermediate"
 
 
 def parse_supervised_response(raw_answer: str) -> SupervisedResponse | None:
@@ -193,7 +211,7 @@ def build_review_system_prompt(
     *,
     skill_content: str | None = None,
 ) -> str:
-    """Return the review system prompt with skill heuristics and level embedded.
+    """Return the review system prompt with skill, level directives, and level.
 
     Args:
         level: Difficulty level (``beginner`` / ``intermediate`` / ``advanced``).
@@ -201,8 +219,12 @@ def build_review_system_prompt(
             body. When ``None``, the packaged ``SKILL.md`` is loaded at runtime.
     """
     skill = skill_content if skill_content is not None else load_skill_content()
+    cfg = get_level_config(_coerce_level(level))
+    directives = format_level_directives(cfg)
     base = _REVIEW_SYSTEM_PROMPT.format(level=level)
-    return _SKILL_HEADER + skill + _SKILL_SEPARATOR + base
+    return (
+        _SKILL_HEADER + skill + _SKILL_SEPARATOR + directives + _SKILL_SEPARATOR + base
+    )
 
 
 def build_review_user_prompt(

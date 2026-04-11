@@ -202,12 +202,15 @@ def ask_cmd(
         ),
     ] = "execution",
     level: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--level",
-            help="Difficulty for supervised mode: beginner, intermediate, advanced.",
+            help=(
+                "Difficulty for supervised mode: beginner, intermediate "
+                "(default), advanced. Only meaningful with --mode supervised."
+            ),
         ),
-    ] = "intermediate",
+    ] = None,
 ) -> None:
     """Ask a question: supervisor picks an agent unless ``--agent`` is set."""
     valid_modes = {"execution", "supervised"}
@@ -218,12 +221,19 @@ def ask_cmd(
         )
         raise typer.Exit(code=1)
     valid_levels = {"beginner", "intermediate", "advanced"}
-    if level not in valid_levels:
+    level_explicit = level is not None
+    if level is not None and level not in valid_levels:
         console.print(
             f"[red]Invalid --level {level!r}.[/red] "
             f"Choose one of: {', '.join(sorted(valid_levels))}.",
         )
         raise typer.Exit(code=1)
+    if level_explicit and mode != "supervised":
+        console.print(
+            "[yellow]--level is only used with --mode supervised; "
+            "ignoring in execution mode.[/yellow]",
+        )
+    effective_level = level if level is not None else "intermediate"
     if agent is not None and agent not in _VALID_AGENTS:
         console.print(
             "[red]Invalid --agent.[/red] "
@@ -244,7 +254,7 @@ def ask_cmd(
             configure_logging=True,
             trace=trace,
             mode=mode,
-            level=level,
+            level=effective_level,
         )
     except AskConfigurationError as exc:
         console.print(f"[red]{exc}[/red]")
@@ -264,7 +274,10 @@ def ask_cmd(
     if exe.supervised_response is not None:
         from adt.cli.supervised_renderer import SupervisedRenderer
 
-        SupervisedRenderer(console).render(exe.supervised_response)
+        SupervisedRenderer(console).render(
+            exe.supervised_response,
+            level=exe.supervised_level,
+        )
     else:
         _format_ask_panel(response.routed_agent or agent or "", response.answer)
     tools_line = ", ".join(response.tools_used) if response.tools_used else "none"

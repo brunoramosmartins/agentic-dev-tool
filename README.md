@@ -5,7 +5,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Portfolio-grade CLI** (and optional **HTTP API**) that routes natural-language questions to **specialized agents**—repository analysis, GitHub project context, and technical research—backed by **OpenAI tool calling** and an **MCP-style** in-process layer: tool **registry**, **JSON Schema** validation, **tiktoken** budgets, ranked context, and disk cache.
+**Portfolio-grade CLI** (and optional **HTTP API**) that routes natural-language questions to **specialized agents**—repository analysis, GitHub project context, and technical research—backed by **OpenAI tool calling** and an **MCP-style** in-process layer: tool **registry**, **JSON Schema** validation, **tiktoken** budgets, ranked context, and disk cache. Ships with a **supervised learning mode** (step-by-step teaching with difficulty levels), **code review**, **request tracing** with cost estimates, and **learning analytics**.
 
 ## Demo
 
@@ -27,6 +27,8 @@
 - [Usage](#usage)
 - [HTTP API (optional)](#http-api-optional)
 - [Commands](#commands)
+- [File layout and state](#file-layout-and-state)
+- [Skills](#skills)
 - [Development](#development)
 - [Releasing (maintainers: PyPI + GitHub)](#releasing-maintainers-pypi--github)
 - [Portfolio checklist](#portfolio-checklist)
@@ -46,30 +48,37 @@ This repo demonstrates **agentic architecture** without a toy script: a real **T
 | Area | What you get |
 |------|----------------|
 | **Agents** | `repo_agent`, `project_agent`, `research_agent` with tool loops |
-| **Routing** | `HybridSupervisor`: cheap LLM JSON intent + rule fallback |
+| **Routing** | `HybridSupervisor`: cheap LLM JSON intent + keyword-rule fallback |
 | **Repos** | Multi `--repo`, `compare_repos`, tree cache, ranked files |
 | **GitHub** | Issues/milestones via API; optional PAT for rate limits |
 | **Research** | arXiv + HTTP fetch tools |
-| **Config** | `~/.adt/config.toml` + `adt config` |
+| **Supervised mode** | Step-by-step teaching guided by the `supervised_engineering` skill |
+| **Difficulty levels** | `beginner`, `intermediate`, `advanced` reshape hints, granularity, and tone |
+| **Code review** | `adt review <file>` → structured feedback (issues, strengths, next step, verdict) |
+| **Learning analytics** | Rotating `~/.adt/logs/learning.jsonl` + `adt stats` panel with trends, verdicts, common issues, tokens |
+| **Tracing** | `--trace` shows routing → context build → LLM/tool calls with token + USD estimates |
+| **Config** | `~/.adt/config.toml` + `adt config show/set/path` + `ADT_*` env overrides |
+| **Guide** | `adt guide` prints a static cheat sheet (no API key needed) |
 | **API** | `adt serve` — FastAPI `/healthz`, `/ask` ([`[api]`](https://pypi.org/project/agentic-dev-tool/) extra) |
 
 ---
 
 ## Architecture
 
-High-level data flow from terminal or HTTP into one shared pipeline (`adt.ask_session.run_ask`), then the runner, tools, and model.
+High-level data flow from terminal or HTTP into one shared pipeline (`adt.ask_session.run_ask`), then the runner, tools, and model. Shaded subsystems (Supervised, Tracing, Analytics) are Phase 8/9 additions that wrap the base agent loop.
 
 ```mermaid
 flowchart TB
   subgraph entry["Entry"]
-    CLI["Typer CLI<br/>adt ask · config · serve"]
+    CLI["Typer CLI<br/>ask · review · stats · guide · config · serve"]
     HTTP["FastAPI optional<br/>POST /ask · GET /healthz"]
   end
 
   subgraph orch["Orchestration"]
-    ASK["ask_session.run_ask"]
+    ASK["ask_session.run_ask<br/>review_session.run_review"]
     BOOT["bootstrap.build_runner"]
     HYB["HybridSupervisor<br/>LLM JSON + keyword rules"]
+    SUP["SupervisedSupervisor<br/>step + review prompts"]
     RUN["Runner<br/>chat + tool loop · budgets"]
   end
 
@@ -85,11 +94,29 @@ flowchart TB
     RE["research_agent"]
   end
 
+  subgraph supervised["Supervised (Phase 9)"]
+    SKILL["skills/<br/>supervised_engineering"]
+    LVL["level_config<br/>beginner/intermediate/advanced"]
+    SESS["SessionContext<br/>~/.adt/session.json"]
+  end
+
+  subgraph obs["Tracing + Analytics (Phase 8/9)"]
+    TRC["TraceContext + events<br/>renderer · cost estimator"]
+    ANL["analytics/<br/>LearningEvent · stats · reader"]
+    LOG["~/.adt/logs/<br/>adt.jsonl · learning.jsonl"]
+  end
+
   LLM["LLMClient<br/>OpenAI"]
 
   CLI --> ASK
   HTTP --> ASK
   ASK --> BOOT
+  ASK --> SUP
+  ASK --> TRC
+  ASK --> ANL
+  SUP --> SKILL
+  SUP --> LVL
+  SUP --> SESS
   BOOT --> HYB
   BOOT --> RUN
   BOOT --> REG
@@ -102,9 +129,12 @@ flowchart TB
   RUN --> EXE
   EXE --> REG
   CTX --> RUN
+  TRC --> RUN
+  ANL --> LOG
+  TRC -.render.-> CLI
 ```
 
-**Narrative:** the user’s query and repo hints become a `QueryRequest`; the supervisor picks an agent; `ContextBuilder` packs bounded context; the `Runner` chats with the model, executes **tool calls** through the registry/executor, and returns an `AgentResponse` (answer, tools used, routing metadata). The CLI renders **Rich** panels; the API returns JSON.
+**Narrative:** the user’s query and repo hints become a `QueryRequest`; the hybrid supervisor picks an agent; `ContextBuilder` packs bounded context; the `Runner` chats with the model, executes **tool calls** through the registry/executor, and returns an `AgentResponse` (answer, tools used, routing metadata). In **supervised mode**, `SupervisedSupervisor` overrides the prompt using the packaged `supervised_engineering` skill plus level directives and persists a lightweight `SessionContext` between runs. The **review** flow reuses the same skill to produce structured feedback (`ReviewFeedback`). **Tracing** captures per-iteration events (routing, context build, LLM/tool calls) plus token + USD estimates. **Analytics** writes supervised and review outcomes to a rotating JSONL log that `adt stats` aggregates. The CLI renders **Rich** panels; the API returns JSON.
 
 Deeper design notes: [`docs/architecture.md`](docs/architecture.md) · tool contracts: [`docs/mcp.md`](docs/mcp.md) · agents/prompts: [`docs/agents.md`](docs/agents.md).
 
@@ -233,6 +263,13 @@ cp .env.example .env
 
 `adt config show` / `adt config set` manage **`~/.adt/config.toml`**. CLI flags and `ADT_*` override file defaults where documented in code.
 
+**Related CLI flags (Phase 8/9 additions):**
+
+- `--mode {execution,supervised}` and `--level {beginner,intermediate,advanced}` on `adt ask` switch the pipeline to the supervised supervisor.
+- `--trace` on `adt ask` prints a Rich trace panel (routing, context, LLM calls, cost).
+- `adt review <file>` accepts `--level` and `--context` to tune reviewer tone and scope.
+- `adt stats --last N` limits aggregation to the most recent N supervised sessions.
+
 ---
 
 ## Usage
@@ -274,11 +311,79 @@ adt ask "Explain src layout" --repo . --agent repo_agent
 adt ask "List issues" --repo myorg/repo --agent project_agent
 ```
 
+### Supervised mode (learning)
+
+Instead of solving the task, `adt` acts as a tutor — it plans 3–6 steps, reveals
+them one at a time, and asks checkpoint questions. The `supervised_engineering`
+skill (packaged under `src/adt/skills/`) drives the teaching heuristics and the
+review rubric.
+
+```bash
+adt ask "Implement binary search in Python" \
+  --mode supervised --level beginner --repo .
+```
+
+Difficulty levels reshape the response:
+
+| Level | Effect |
+|-------|--------|
+| `beginner` | Smaller steps, more hints, explicit type guidance, encouraging tone. |
+| `intermediate` | Balanced granularity and hinting (default). |
+| `advanced` | Larger steps, trade-off discussion, minimal hand-holding, critical tone. |
+
+Session state (current step, previous feedback) is persisted at
+`~/.adt/session.json` so the next `ask`/`review` picks up where you left off.
+
+### Code review
+
+Submit a file and get structured feedback (issues with line numbers, strengths,
+next step, overall verdict) from the reviewer LLM. Feedback is rendered as a
+colored Rich panel and the verdict feeds back into the session + analytics log.
+
+```bash
+adt review src/mymod/solution.py --context "binary search exercise"
+adt review src/mymod/solution.py --level advanced
+```
+
+### Tracing (`--trace`)
+
+Adds a trace panel under the answer showing routing decision, context build
+stats, per-iteration LLM/tool calls, cumulative tokens, and a USD cost
+estimate via `adt.tracing.cost`.
+
+```bash
+adt ask "Explain this repo" --repo . --trace
+```
+
+### Learning analytics (`adt stats`)
+
+Supervised runs and reviews append `LearningEvent`s to a rotating
+`~/.adt/logs/learning.jsonl`. `adt stats` renders a panel with session count,
+review verdicts, common issue categories, improvement trend, and token totals.
+
+```bash
+adt stats           # full history
+adt stats --last 10 # only the last 10 supervised sessions
+```
+
+### Quick reference (`adt guide`)
+
+`adt guide` prints a static cheat sheet (commands, modes, levels, agents,
+skills, environment) without making any API calls — ideal when you just
+installed the tool or want to jog your memory.
+
+```bash
+adt guide
+```
+
 ### Common flags
 
 - `--repo`, `-r` — Repeatable: existing directory or `owner/repo` slug.
 - `--token` — GitHub PAT for this run (overrides `GITHUB_TOKEN`).
 - `--agent`, `-a` — `repo_agent`, `research_agent`, or `project_agent`.
+- `--mode` — `execution` (default) or `supervised`.
+- `--level` — `beginner`, `intermediate`, `advanced` (supervised only).
+- `--trace` — Print a trace panel with routing, LLM calls, token use, and cost.
 - `--verbose`, `-v` — Debug logging, token usage, budget hint, context snippet.
 - `--log-level` — `DEBUG` … `ERROR` for JSON file logs under `~/.adt/logs/`.
 - `--no-cache` — Skip repo tree cache.
@@ -305,15 +410,66 @@ adt serve --host 127.0.0.1 --port 8765
 
 | Command | Purpose |
 |---------|---------|
-| `adt ask …` | Main agent loop. |
+| `adt ask …` | Main agent loop (supports `--mode supervised`, `--level`, `--trace`). |
+| `adt review <file>` | Structured code review with issues, strengths, next step, verdict. |
+| `adt stats [--last N]` | Aggregate supervised learning log: sessions, verdicts, trend, tokens. |
+| `adt guide` | Static quick-reference: commands, modes, levels, agents, skills. |
 | `adt serve` | FastAPI + uvicorn (`[api]`). |
 | `adt config show` / `path` / `set` | `~/.adt/config.toml`. |
 | `adt version` | Package version. |
 | `adt info` | Short feature summary. |
 
 ```bash
-adt --help && adt ask --help && adt serve --help
+adt --help && adt ask --help && adt review --help && adt stats --help
 ```
+
+> **Tip:** `adt guide` does not require `OPENAI_API_KEY` and never hits the
+> network — it is the fastest way to see every feature at a glance.
+
+---
+
+## File layout and state
+
+`adt` keeps all mutable state under `~/.adt/` so your repositories stay clean:
+
+| Path | Written by | Purpose |
+|------|------------|---------|
+| `~/.adt/config.toml` | `adt config set` | Persistent defaults (model, log level, routing). |
+| `~/.adt/cache/` | `ContextBuilder` | Repo tree cache (`--no-cache` or `ADT_CACHE_TTL=0` to disable). |
+| `~/.adt/logs/adt.jsonl` | `log_adt` helper | Structured runtime logs (routing, tool calls, errors). |
+| `~/.adt/logs/learning.jsonl` | `adt ask --mode supervised`, `adt review` | Rotating JSONL (10 MB × 5 backups) consumed by `adt stats`. |
+| `~/.adt/session.json` | `adt ask --mode supervised`, `adt review` | Current supervised step, iteration count, recent feedback. |
+
+Delete any of these to reset the corresponding state — nothing under `~/.adt`
+is required for a fresh install.
+
+---
+
+## Skills
+
+Supervised teaching heuristics live in a **packaged skill** so they can be
+edited and versioned without touching agent code.
+
+```
+src/adt/skills/
+└── supervised_engineering/
+    ├── SKILL.md        # When/when-not/how (teaching heuristics + rubric)
+    ├── loader.py       # load_skill_content() via importlib.resources
+    └── __init__.py
+```
+
+`SupervisedSupervisor` reads the markdown via `importlib.resources` at runtime
+and prepends it to both the step-guidance and code-review prompts. Level
+directives (`beginner`/`intermediate`/`advanced`) come from
+`adt.core.level_config.LEVEL_CONFIGS` and are concatenated after the skill so
+prompt tone, hint count, and step granularity all change with `--level`.
+
+To add a new skill:
+
+1. Create `src/adt/skills/<name>/SKILL.md` and a matching `loader.py`.
+2. Register the skill path in the package wheel (`pyproject.toml` already
+   includes `src/adt/skills/**/*.md`).
+3. Load it from the agent/supervisor that consumes it.
 
 ---
 

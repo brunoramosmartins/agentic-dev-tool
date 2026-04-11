@@ -142,6 +142,7 @@ def run_ask(
 
     supervised_resp: SupervisedResponse | None = None
     if mode == "supervised":
+        from adt.analytics import LearningEvent, log_learning_event
         from adt.core.supervised_supervisor import parse_supervised_response
 
         supervised_resp = parse_supervised_response(response.answer)
@@ -149,6 +150,30 @@ def run_ask(
             sess = SessionContext.load()
             sess.update_from_supervised(supervised_resp)
             sess.save()
+
+            usage = runner.last_token_usage or {}
+            trace_id = trace_ctx.trace_id if trace_ctx is not None else ""
+            completion_ms: int | None = None
+            if trace_ctx is not None:
+                completion_ms = int(trace_ctx.elapsed_ms())
+            event = LearningEvent(
+                trace_id=trace_id,
+                component="supervisor",
+                event_type="supervised_step",
+                step_id=supervised_resp.current_step.step_number,
+                iteration_count=sess.iteration_count,
+                assessment="n/a",
+                error_types=[],
+                completion_time_ms=completion_ms,
+                problem_summary=supervised_resp.problem_summary,
+                level=level,
+                data={
+                    "total_steps": supervised_resp.total_steps,
+                    "prompt_tokens": int(usage.get("prompt_tokens", 0) or 0),
+                    "completion_tokens": int(usage.get("completion_tokens", 0) or 0),
+                },
+            )
+            log_learning_event(event)
 
     return AskExecution(
         response=response,

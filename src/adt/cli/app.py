@@ -92,6 +92,19 @@ def info_cmd() -> None:
     )
 
 
+@app.command("guide")
+def guide_cmd() -> None:
+    """Print a static quick-reference: commands, modes, levels, agents, skills.
+
+    This command does not hit the network and does not require an API key.
+    Use it as a fast "what can adt do?" cheat sheet (think of it as the
+    ``?`` prompt in Claude Code).
+    """
+    from adt.cli.guide_renderer import GuideRenderer
+
+    GuideRenderer(console).render()
+
+
 @config_app.command("path")
 def config_path_cmd() -> None:
     """Print the config file path."""
@@ -376,6 +389,29 @@ def review_cmd(
             f"[dim]Session:[/dim] step {result.session.current_step}/"
             f"{result.session.total_steps} — {result.session.problem_summary}",
         )
+
+
+@app.command("stats")
+def stats_cmd(
+    last: Annotated[
+        int | None,
+        typer.Option(
+            "--last",
+            help="Only aggregate the most recent N supervised sessions.",
+        ),
+    ] = None,
+) -> None:
+    """Summarize supervised learning progress from ``~/.adt/logs/learning.jsonl``."""
+    from adt.analytics import compute_stats, read_learning_events
+    from adt.cli.stats_renderer import StatsRenderer
+
+    if last is not None and last <= 0:
+        console.print("[red]--last must be a positive integer.[/red]")
+        raise typer.Exit(code=1)
+
+    events = read_learning_events()
+    stats = compute_stats(events, last_n=last)
+    StatsRenderer(console).render(stats)
 
 
 @app.command("serve")

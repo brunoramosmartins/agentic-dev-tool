@@ -157,6 +157,27 @@ def run_review(
         sess.record_feedback(feedback.overall_assessment)
         sess.save()
 
+        from adt.analytics import LearningEvent, categorize_issue, log_learning_event
+
+        error_types = [categorize_issue(issue) for issue in feedback.issues]
+        event = LearningEvent(
+            trace_id="",
+            component="reviewer",
+            event_type="code_review",
+            step_id=sess.current_step,
+            iteration_count=sess.iteration_count,
+            assessment=feedback.overall_assessment,
+            error_types=error_types,
+            completion_time_ms=None,
+            problem_summary=sess.problem_summary,
+            level=level,
+            data={
+                "issue_count": len(feedback.issues),
+                "file": str(path),
+            },
+        )
+        log_learning_event(event)
+
     log_adt(
         logger,
         logging.INFO,

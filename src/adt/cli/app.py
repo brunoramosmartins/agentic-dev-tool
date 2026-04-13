@@ -134,6 +134,13 @@ def config_set_cmd(
     ],
 ) -> None:
     """Persist one key under [adt] in config.toml."""
+    from adt.config_validator import ConfigValidationError, validate_key_value
+
+    try:
+        validate_key_value(key, value)
+    except ConfigValidationError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
     try:
         update_config_key(None, key, value)
     except ValueError as exc:
@@ -439,17 +446,55 @@ def stats_cmd(
             help="Only aggregate the most recent N supervised sessions.",
         ),
     ] = None,
+    export: Annotated[
+        str | None,
+        typer.Option(
+            "--export",
+            help="Export format: csv, json, or md (prints to stdout or --out).",
+        ),
+    ] = None,
+    out: Annotated[
+        str | None,
+        typer.Option(
+            "--out",
+            help="Write export output to this file instead of stdout.",
+        ),
+    ] = None,
 ) -> None:
     """Summarize supervised learning progress from ``~/.adt/logs/learning.jsonl``."""
     from adt.analytics import compute_stats, read_learning_events
-    from adt.cli.stats_renderer import StatsRenderer
 
     if last is not None and last <= 0:
         console.print("[red]--last must be a positive integer.[/red]")
         raise typer.Exit(code=1)
 
+    valid_formats = {"csv", "json", "md"}
+    if export is not None and export not in valid_formats:
+        console.print(
+            f"[red]Invalid --export {export!r}.[/red] "
+            f"Choose one of: {', '.join(sorted(valid_formats))}.",
+        )
+        raise typer.Exit(code=1)
+
     events = read_learning_events()
     stats = compute_stats(events, last_n=last)
+
+    if export is not None:
+        from adt.analytics.exporter import export_csv, export_json, export_markdown
+
+        exporters = {"csv": export_csv, "json": export_json, "md": export_markdown}
+        content = exporters[export](stats)
+        if out is not None:
+            from pathlib import Path as _Path
+
+            _Path(out).write_text(content, encoding="utf-8")
+            console.print(f"[green]Stats exported to {out}[/green]")
+        else:
+            typer.echo(content, nl=False)
+        return
+
+    from adt.cli.stats_renderer import StatsRenderer
+
     StatsRenderer(console).render(stats)
 
 

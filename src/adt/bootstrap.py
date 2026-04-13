@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 from adt.agents.base import BaseAgent
 
 if TYPE_CHECKING:
+    from adt.core.runner_config import RunnerConfig
     from adt.tracing.context import TraceContext
 from adt.agents.project_agent import ProjectAgent
 from adt.agents.repo_agent import RepoAgent
@@ -458,7 +459,7 @@ def register_project_tools(
 
 
 def build_runner(
-    repo_roots: Path | dict[str, Path],
+    repo_roots_or_config: Path | dict[str, Path] | RunnerConfig,
     *,
     markdown_root: Path | None = None,
     primary_repo_key: str | None = None,
@@ -476,24 +477,33 @@ def build_runner(
 ) -> Runner:
     """Construct a :class:`~adt.core.runner.Runner` for the full agent/tool set.
 
-    Args:
-        repo_roots: Single path or map of session ids (``r0``, …) to repo roots.
-        markdown_root: Base for ``read_markdown`` (defaults to primary repo root).
-        primary_repo_key: Default repo id for tools (defaults to first key).
-        model: OpenAI chat model name.
-        api_key: Optional API key (falls back to ``OPENAI_API_KEY`` in the client).
-        github_token: Optional token forwarded to GitHub REST tools.
-        max_tool_iterations: Upper bound on LLM/tool round-trips.
-        use_context_cache: When True, cache repository tree listings on disk.
-        context_cache_ttl: Override tree cache TTL (seconds).
-        token_budget_total: Override logical token window for context budgeting.
-        use_llm_routing: When True, classify intent with a small JSON LLM call first.
-        routing_model: Model name for routing (defaults to ``model``).
-        agent_chain: When non-empty and ``force_agent`` is unset, run this sequence.
+    Accepts either a :class:`~adt.core.runner_config.RunnerConfig` as the
+    single positional argument **or** the legacy keyword arguments.
 
     Returns:
         A runner with repo, research, and project tools registered.
     """
+    from adt.core.runner_config import RunnerConfig
+
+    if isinstance(repo_roots_or_config, RunnerConfig):
+        cfg = repo_roots_or_config
+        repo_roots: Path | dict[str, Path] = cfg.repo_roots
+        markdown_root = cfg.markdown_root
+        primary_repo_key = cfg.primary_repo_key
+        model = cfg.model
+        api_key = cfg.api_key
+        github_token = cfg.github_token
+        max_tool_iterations = cfg.max_tool_iterations
+        use_context_cache = cfg.use_context_cache
+        context_cache_ttl = cfg.context_cache_ttl
+        token_budget_total = cfg.token_budget_total
+        use_llm_routing = cfg.use_llm_routing
+        routing_model = cfg.routing_model
+        agent_chain = list(cfg.agent_chain)
+        trace = cfg.trace
+    else:
+        repo_roots = repo_roots_or_config
+
     if isinstance(repo_roots, Path):
         roots_map: dict[str, Path] = {"r0": repo_roots.resolve()}
         pk = "r0"

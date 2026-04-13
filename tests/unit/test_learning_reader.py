@@ -55,12 +55,13 @@ def test_read_learning_events_skips_corrupted_lines(tmp_path: Path) -> None:
             "",  # blank
             "{not json",  # malformed
             "[1,2,3]",  # not a dict
-            json.dumps({"bogus": "shape"}),  # schema mismatch survives the base model
+            json.dumps({"bogus": "shape"}),  # all-defaults model, parses OK
             json.dumps(good.model_dump(mode="json"), default=str),
         ]
     )
     target.write_text(content, encoding="utf-8")
     loaded = read_learning_events(path=target)
-    # The bogus one has required fields missing, so it is also skipped.
-    assert len(loaded) == 1
-    assert loaded[0].trace_id == "ok"
+    # {"bogus": "shape"} parses with defaults (schema v2 has no required fields).
+    # blank, malformed JSON, and non-dict lines are skipped.
+    assert len(loaded) == 2
+    assert loaded[-1].trace_id == "ok"

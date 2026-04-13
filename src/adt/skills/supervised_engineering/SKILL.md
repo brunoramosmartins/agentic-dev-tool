@@ -1,3 +1,4 @@
+<!-- version: 1 -->
 # Supervised Engineering Skill
 
 This skill drives the supervised learning mode of `adt`. It is loaded at

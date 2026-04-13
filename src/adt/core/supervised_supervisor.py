@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from adt.skills.context import SkillContext
 
 from adt.core.level_config import format_level_directives, get_level_config
 from adt.logging.json_log import log_adt
@@ -15,7 +18,7 @@ from adt.models.schemas import (
     SupervisedResponse,
     SupervisedStep,
 )
-from adt.skills.supervised_engineering import load_skill_content
+from adt.skills.supervised_engineering.loader import load_skill_context
 
 _SKILL_HEADER = (
     "## Skill: Supervised Engineering\n"
@@ -73,15 +76,24 @@ def build_supervised_system_prompt(
     level: str,
     *,
     skill_content: str | None = None,
+    skill_ctx: SkillContext | None = None,
 ) -> str:
     """Return the system prompt with skill, level directives, and difficulty.
 
     Args:
         level: Difficulty level (``beginner`` / ``intermediate`` / ``advanced``).
-        skill_content: Optional override for the supervised engineering skill
-            body. When ``None``, the packaged ``SKILL.md`` is loaded at runtime.
+        skill_content: Optional raw markdown override (legacy callers / tests).
+        skill_ctx: A :class:`~adt.skills.context.SkillContext` instance. Takes
+            precedence over *skill_content*. When both are ``None`` the
+            packaged ``SKILL.md`` is loaded at runtime.
     """
-    skill = skill_content if skill_content is not None else load_skill_content()
+    if skill_ctx is not None:
+        skill = skill_ctx.markdown
+    elif skill_content is not None:
+        skill = skill_content
+    else:
+        ctx = load_skill_context()
+        skill = ctx.markdown
     cfg = get_level_config(_coerce_level(level))
     directives = format_level_directives(cfg)
     base = _SUPERVISED_SYSTEM_PROMPT.format(level=level)
@@ -210,15 +222,23 @@ def build_review_system_prompt(
     level: str,
     *,
     skill_content: str | None = None,
+    skill_ctx: SkillContext | None = None,
 ) -> str:
     """Return the review system prompt with skill, level directives, and level.
 
     Args:
         level: Difficulty level (``beginner`` / ``intermediate`` / ``advanced``).
-        skill_content: Optional override for the supervised engineering skill
-            body. When ``None``, the packaged ``SKILL.md`` is loaded at runtime.
+        skill_content: Optional raw markdown override (legacy callers / tests).
+        skill_ctx: A :class:`~adt.skills.context.SkillContext` instance. Takes
+            precedence over *skill_content*.
     """
-    skill = skill_content if skill_content is not None else load_skill_content()
+    if skill_ctx is not None:
+        skill = skill_ctx.markdown
+    elif skill_content is not None:
+        skill = skill_content
+    else:
+        ctx = load_skill_context()
+        skill = ctx.markdown
     cfg = get_level_config(_coerce_level(level))
     directives = format_level_directives(cfg)
     base = _REVIEW_SYSTEM_PROMPT.format(level=level)

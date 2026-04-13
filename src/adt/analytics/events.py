@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from typing import Any
+
+from pydantic import BaseModel, Field
+
 from adt.models.schemas import CodeIssue
-from adt.tracing.events import TraceEvent
 
 _CATEGORY_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
@@ -68,31 +72,38 @@ def categorize_issue(issue: CodeIssue) -> str:
     return "other"
 
 
-class LearningEvent(TraceEvent):
-    """Trace event specific to supervised learning sessions.
+class LearningEvent(BaseModel):
+    """Standalone event for supervised learning analytics (schema v2).
 
-    Extends :class:`~adt.tracing.events.TraceEvent` with fields describing
-    a single pedagogical interaction. Each supervised ``ask`` emits one
-    ``supervised_step`` event and each ``review`` emits one ``code_review``
-    event. They share a trace id per CLI invocation but can be correlated
-    across invocations via ``problem_summary``.
+    Decoupled from :class:`~adt.tracing.events.TraceEvent` so that review
+    events are not forced to carry an empty ``trace_id``.
 
     Attributes:
-        step_id: 1-based step the user is on in the current supervised
-            session. ``0`` when not applicable (e.g. session not started).
-        iteration_count: Number of commands executed against this session
-            so far, including the current one.
-        assessment: Review verdict (``needs_work`` / ``on_track`` /
-            ``excellent``) for review events; ``"n/a"`` for pure
-            step-guidance events.
-        error_types: Coarse categories of issues found during a review
-            (empty for non-review events).
-        completion_time_ms: Wall clock time taken to produce this event's
-            payload, in milliseconds. ``None`` when unavailable.
-        problem_summary: Free-text restatement of the problem the user is
-            working on. Used to group events into sessions.
-        level: Difficulty level at the moment the event was emitted.
+        trace_id: Trace correlation id (``None`` for review-only events).
+        session_name: Named session this event belongs to (``None`` for
+            legacy v1 events).
+        timestamp: UTC timestamp (auto-generated).
+        component: Emitting component (``supervisor`` or ``reviewer``).
+        event_type: ``supervised_step`` or ``code_review``.
+        iteration: Optional loop iteration number.
+        data: Arbitrary key-value pairs (token counts, etc.).
+        step_id: 1-based step the user is on.
+        iteration_count: Commands executed against this session so far.
+        assessment: Review verdict or ``"n/a"`` for step-guidance events.
+        error_types: Coarse issue categories from the reviewer.
+        completion_time_ms: Wall clock time in milliseconds.
+        problem_summary: Free-text problem description (session grouping key).
+        level: Difficulty level at emit time.
+        schema_version: ``2`` for new events; reader tolerates ``1``.
     """
+
+    trace_id: str | None = None
+    session_name: str | None = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    component: str = ""
+    event_type: str = ""
+    iteration: int | None = None
+    data: dict[str, Any] = Field(default_factory=dict)
 
     step_id: int = 0
     iteration_count: int = 0
@@ -101,3 +112,4 @@ class LearningEvent(TraceEvent):
     completion_time_ms: int | None = None
     problem_summary: str = ""
     level: str = "intermediate"
+    schema_version: int = 2

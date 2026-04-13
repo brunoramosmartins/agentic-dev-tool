@@ -1,0 +1,56 @@
+site_name: Agentic Dev Tool
+site_description: AI CLI that routes questions to specialized agents
+site_url: https://brunoramosmartins.github.io/agentic-dev-tool
+repo_url: https://github.com/brunoramosmartins/agentic-dev-tool
+repo_name: brunoramosmartins/agentic-dev-tool
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.sections
+    - search.highlight
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/install.md
+      - Quick Start: getting-started/quickstart.md
+  - Guides:
+      - Supervised Mode: guides/supervised.md
+      - Tracing: guides/tracing.md
+      - Analytics: guides/analytics.md
+      - Plugins: guides/plugins.md
+  - Reference:
+      - Architecture: reference/architecture.md
+      - Agents: reference/agents.md
+      - MCP Layer: reference/mcp.md
+      - Skills: reference/skills.md
+  - API:
+      - CLI Reference: api/cli.md
+      - HTTP API: api/http.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true

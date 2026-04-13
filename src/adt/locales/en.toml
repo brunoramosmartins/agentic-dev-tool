@@ -1,0 +1,90 @@
+# English locale for adt CLI
+
+[common]
+error = "Error"
+saved = "Saved."
+no_data = "No data."
+
+[session]
+no_active = "No active supervised session."
+cleared = "Session '{name}' cleared."
+nothing_to_clear = "No session '{name}' found — nothing to clear."
+not_found = "No session '{name}' found."
+exported = "Session exported to {path}"
+no_sessions = "No sessions found."
+
+[stats]
+title = "Learning Stats"
+sessions = "Sessions"
+reviews = "Reviews"
+avg_steps = "Avg steps/session"
+avg_iterations = "Avg iterations/session"
+common_issues = "Common Issues"
+review_verdicts = "Review Verdicts"
+improvement_trend = "Improvement Trend"
+iterations_per_session = "Iterations per session"
+total_tokens = "Total LLM tokens"
+no_events = "No supervised learning events recorded yet. Run `adt ask ... --mode supervised` or `adt review` first."
+exported = "Stats exported to {path}"
+occurrence = "occurrence"
+occurrences = "occurrences"
+dashboard_written = "Dashboard written to {path}"
+
+[review]
+panel_title = "Code Review"
+panel_title_raw = "Code Review (raw)"
+strengths = "Strengths"
+improvements = "Improvements"
+next_step = "Next Step"
+hint_prefix = "Hint: "
+needs_work = "Needs Work"
+on_track = "On Track"
+excellent = "Excellent"
+
+[supervised]
+panel_title = "Supervised Mode"
+level = "Level"
+problem = "Problem"
+requirements = "Requirements"
+hints = "Hints"
+questions = "Questions for you"
+next_prefix = "Next: "
+beginner = "Beginner"
+intermediate = "Intermediate"
+advanced = "Advanced"
+
+[guide]
+title = "adt — Quick Reference"
+commands = "Commands"
+modes = "Modes"
+levels = "Difficulty Levels (supervised mode)"
+agents = "Agents"
+skills = "Skills"
+environment = "Environment"
+
+[ask]
+agent_label = "Agent"
+tools_label = "Tools used"
+last_review = "Last review: {verdict} — continue at step {step}/{total}"
+
+[runs]
+no_runs = "No saved runs."
+not_found = "Run '{id}' not found."
+deleted = "Run '{id}' deleted."
+
+[plugins]
+no_plugins = "No plugins installed."
+valid = "Plugin is valid."
+skills_header = "Skills"
+tools_header = "Tools"
+
+[config]
+unknown_key = "Unknown config key: {key}"
+
+[errors]
+invalid_mode = "Invalid --mode {mode}. Choose one of: {options}."
+invalid_level = "Invalid --level {level}. Choose one of: {options}."
+invalid_agent = "Invalid --agent. Choose one of: {options}."
+unexpected = "Unexpected error while running the agent."
+missing_api_key = "Missing OPENAI_API_KEY. Set it in the environment or in a .env file."
+missing_api_deps = "Missing API dependencies. Install with: pip install 'agentic-dev-tool[api]'"

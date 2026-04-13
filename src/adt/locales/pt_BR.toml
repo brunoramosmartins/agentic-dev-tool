@@ -1,0 +1,90 @@
+# Brazilian Portuguese locale for adt CLI
+
+[common]
+error = "Erro"
+saved = "Salvo."
+no_data = "Sem dados."
+
+[session]
+no_active = "Nenhuma sessão supervisionada ativa."
+cleared = "Sessão '{name}' limpa."
+nothing_to_clear = "Nenhuma sessão '{name}' encontrada — nada para limpar."
+not_found = "Nenhuma sessão '{name}' encontrada."
+exported = "Sessão exportada para {path}"
+no_sessions = "Nenhuma sessão encontrada."
+
+[stats]
+title = "Estatísticas de Aprendizado"
+sessions = "Sessões"
+reviews = "Revisões"
+avg_steps = "Passos médios/sessão"
+avg_iterations = "Iterações médias/sessão"
+common_issues = "Problemas Comuns"
+review_verdicts = "Vereditos de Revisão"
+improvement_trend = "Tendência de Melhoria"
+iterations_per_session = "Iterações por sessão"
+total_tokens = "Total de tokens LLM"
+no_events = "Nenhum evento de aprendizado supervisionado registrado. Execute `adt ask ... --mode supervised` ou `adt review` primeiro."
+exported = "Estatísticas exportadas para {path}"
+occurrence = "ocorrência"
+occurrences = "ocorrências"
+dashboard_written = "Dashboard salvo em {path}"
+
+[review]
+panel_title = "Revisão de Código"
+panel_title_raw = "Revisão de Código (bruto)"
+strengths = "Pontos Fortes"
+improvements = "Melhorias"
+next_step = "Próximo Passo"
+hint_prefix = "Dica: "
+needs_work = "Precisa Melhorar"
+on_track = "No Caminho"
+excellent = "Excelente"
+
+[supervised]
+panel_title = "Modo Supervisionado"
+level = "Nível"
+problem = "Problema"
+requirements = "Requisitos"
+hints = "Dicas"
+questions = "Perguntas para você"
+next_prefix = "Próximo: "
+beginner = "Iniciante"
+intermediate = "Intermediário"
+advanced = "Avançado"
+
+[guide]
+title = "adt — Referência Rápida"
+commands = "Comandos"
+modes = "Modos"
+levels = "Níveis de Dificuldade (modo supervisionado)"
+agents = "Agentes"
+skills = "Habilidades"
+environment = "Ambiente"
+
+[ask]
+agent_label = "Agente"
+tools_label = "Ferramentas usadas"
+last_review = "Última revisão: {verdict} — continue no passo {step}/{total}"
+
+[runs]
+no_runs = "Nenhuma execução salva."
+not_found = "Execução '{id}' não encontrada."
+deleted = "Execução '{id}' deletada."
+
+[plugins]
+no_plugins = "Nenhum plugin instalado."
+valid = "Plugin é válido."
+skills_header = "Habilidades"
+tools_header = "Ferramentas"
+
+[config]
+unknown_key = "Chave de configuração desconhecida: {key}"
+
+[errors]
+invalid_mode = "--mode {mode} inválido. Escolha um dos: {options}."
+invalid_level = "--level {level} inválido. Escolha um dos: {options}."
+invalid_agent = "--agent inválido. Escolha um dos: {options}."
+unexpected = "Erro inesperado ao executar o agente."
+missing_api_key = "OPENAI_API_KEY não encontrada. Defina-a no ambiente ou em um arquivo .env."
+missing_api_deps = "Dependências da API ausentes. Instale com: pip install 'agentic-dev-tool[api]'"

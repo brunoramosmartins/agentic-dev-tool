@@ -7,6 +7,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from adt.analytics.stats import LearningStats
+from adt.cli.i18n import t
 
 
 class StatsRenderer:
@@ -18,15 +19,21 @@ class StatsRenderer:
     def render(self, stats: LearningStats) -> None:
         """Print the stats panel."""
         header = Text()
-        header.append(f"Sessions: {stats.sessions}".ljust(22), style="bold")
         header.append(
-            f"Avg steps/session: {stats.avg_steps_per_session}",
+            f"{t('stats.sessions')}: {stats.sessions}".ljust(22),
+            style="bold",
+        )
+        header.append(
+            f"{t('stats.avg_steps')}: {stats.avg_steps_per_session}",
             style="bold",
         )
         header.append("\n")
-        header.append(f"Reviews:  {stats.reviews}".ljust(22), style="bold")
         header.append(
-            f"Avg iterations/session: {stats.avg_iterations_per_step}",
+            f"{t('stats.reviews')}:  {stats.reviews}".ljust(22),
+            style="bold",
+        )
+        header.append(
+            f"{t('stats.avg_iterations')}: {stats.avg_iterations_per_step}",
             style="bold",
         )
 
@@ -35,18 +42,18 @@ class StatsRenderer:
         if stats.common_issues:
             issues = Text()
             issues.append("\n")
-            issues.append("Common Issues:\n", style="bold")
+            issues.append(f"{t('stats.common_issues')}:\n", style="bold")
             for rank, (name, count) in enumerate(stats.common_issues, start=1):
                 issues.append(f"  {rank}. ")
                 issues.append(name, style="yellow")
-                noun = "occurrence" if count == 1 else "occurrences"
+                noun = t("stats.occurrence") if count == 1 else t("stats.occurrences")
                 issues.append(f" ({count} {noun})\n", style="dim")
             sections.append(issues)
 
         if stats.assessments:
             verdict = Text()
             verdict.append("\n")
-            verdict.append("Review Verdicts:\n", style="bold")
+            verdict.append(f"{t('stats.review_verdicts')}:\n", style="bold")
             for name, count in sorted(stats.assessments.items(), key=lambda kv: -kv[1]):
                 verdict.append("  - ")
                 verdict.append(name, style=_verdict_style(name))
@@ -56,8 +63,8 @@ class StatsRenderer:
         if stats.improvement_trend:
             trend = Text()
             trend.append("\n")
-            trend.append("Improvement Trend:\n", style="bold")
-            trend.append("  Iterations per session: ")
+            trend.append(f"{t('stats.improvement_trend')}:\n", style="bold")
+            trend.append(f"  {t('stats.iterations_per_session')}: ")
             arrow = " -> ".join(str(v) for v in stats.improvement_trend)
             trend.append(arrow, style="cyan")
             sections.append(trend)
@@ -65,24 +72,20 @@ class StatsRenderer:
         if stats.total_tokens:
             tokens = Text()
             tokens.append("\n")
-            tokens.append("Total LLM tokens: ", style="bold")
+            tokens.append(f"{t('stats.total_tokens')}: ", style="bold")
             tokens.append(f"{stats.total_tokens:,}", style="dim")
             sections.append(tokens)
 
         if stats.sessions == 0:
             empty = Text()
             empty.append("\n")
-            empty.append(
-                "No supervised learning events recorded yet. Run "
-                "`adt ask ... --mode supervised` or `adt review` first.",
-                style="dim",
-            )
+            empty.append(t("stats.no_events"), style="dim")
             sections.append(empty)
 
         self._console.print(
             Panel(
                 Group(*sections),
-                title="Learning Stats",
+                title=t("stats.title"),
                 border_style="blue",
                 title_align="left",
             ),

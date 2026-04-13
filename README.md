@@ -4,6 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/agentic-dev-tool.svg)](https://pypi.org/project/agentic-dev-tool/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docs](https://img.shields.io/badge/docs-mkdocs-blue.svg)](https://brunoramosmartins.github.io/agentic-dev-tool)
 
 **Portfolio-grade CLI** (and optional **HTTP API**) that routes natural-language questions to **specialized agents**—repository analysis, GitHub project context, and technical research—backed by **OpenAI tool calling** and an **MCP-style** in-process layer: tool **registry**, **JSON Schema** validation, **tiktoken** budgets, ranked context, and disk cache. Ships with a **supervised learning mode** (step-by-step teaching with difficulty levels), **code review**, **request tracing** with cost estimates, and **learning analytics**.
 

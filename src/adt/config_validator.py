@@ -92,6 +92,12 @@ def validate_key_value(key: str, raw: str) -> None:
                 f"review_max_bytes must be at least 1024, got {raw}."
             )
 
+    elif k == "lang":
+        if not raw.strip():
+            raise ConfigValidationError(
+                "lang must be a non-empty locale code (e.g. 'en', 'pt_BR')."
+            )
+
     elif k == "agent_chain":
         parts = [p.strip() for p in raw.split(",") if p.strip()]
         for part in parts:

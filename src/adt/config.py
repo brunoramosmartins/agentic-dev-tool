@@ -37,6 +37,7 @@ class AdtConfig:
     routing_model: str = "gpt-4o-mini"
     max_tool_iterations: int = 5
     token_budget: int | None = None
+    review_max_bytes: int = 200_000
     agent_chain: list[str] = field(default_factory=list)
     custom_tools: list[str] = field(default_factory=list)
 
@@ -49,6 +50,7 @@ class AdtConfig:
             "use_llm_routing": self.use_llm_routing,
             "routing_model": self.routing_model,
             "max_tool_iterations": self.max_tool_iterations,
+            "review_max_bytes": self.review_max_bytes,
             "agent_chain": self.agent_chain,
             "custom_tools": self.custom_tools,
         }
@@ -69,6 +71,7 @@ class AdtConfig:
             ("routing_model", "gpt-4o-mini"),
             ("max_tool_iterations", 5),
             ("token_budget", None),
+            ("review_max_bytes", 200_000),
             ("agent_chain", []),
             ("custom_tools", []),
         ]:
@@ -85,6 +88,11 @@ class AdtConfig:
                     kwargs[key] = int(raw)
                 except (TypeError, ValueError):
                     kwargs[key] = 5
+            elif key == "review_max_bytes":
+                try:
+                    kwargs[key] = int(raw)
+                except (TypeError, ValueError):
+                    kwargs[key] = 200_000
             elif key == "token_budget":
                 if raw is None or raw == "":
                     kwargs[key] = None
@@ -153,6 +161,9 @@ def apply_env_overrides(cfg: AdtConfig) -> AdtConfig:
     tb = os.environ.get("ADT_TOKEN_BUDGET", "").strip()
     if tb.isdigit():
         c.token_budget = int(tb)
+    rmb = os.environ.get("ADT_REVIEW_MAX_BYTES", "").strip()
+    if rmb.isdigit():
+        c.review_max_bytes = max(1024, int(rmb))
     return c
 
 
@@ -192,6 +203,8 @@ def update_config_key(path: Path | None, key: str, value: str) -> AdtConfig:
     elif key_norm == "agent_chain":
         parts = [p.strip() for p in value.split(",") if p.strip()]
         cfg = replace(cfg, agent_chain=parts)
+    elif key_norm == "review_max_bytes":
+        cfg = replace(cfg, review_max_bytes=max(1024, int(value)))
     elif key_norm == "custom_tools":
         parts = [p.strip() for p in value.split(",") if p.strip()]
         cfg = replace(cfg, custom_tools=parts)

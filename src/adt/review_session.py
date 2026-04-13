@@ -53,6 +53,7 @@ def run_review(
     configure_logging: bool = True,
     llm: LLMBackend | None = None,
     session: SessionContext | None = None,
+    max_bytes: int | None = None,
 ) -> ReviewExecution:
     """Read ``file``, send it to the reviewer LLM, return parsed feedback.
 
@@ -76,22 +77,23 @@ def run_review(
     if not path.exists() or not path.is_file():
         msg = f"File not found: {path}"
         raise ReviewConfigurationError(msg)
+
+    cfg = apply_env_overrides(load_config_file())
+    effective_max = max_bytes if max_bytes is not None else cfg.review_max_bytes
+
     try:
         size = path.stat().st_size
     except OSError as exc:
         raise ReviewConfigurationError(f"Cannot stat {path}: {exc}") from exc
-    if size > _MAX_FILE_BYTES:
+    if size > effective_max:
         msg = (
-            f"File {path.name} is {size} bytes; review limit is "
-            f"{_MAX_FILE_BYTES} bytes."
+            f"File {path.name} is {size} bytes; review limit is {effective_max} bytes."
         )
         raise ReviewConfigurationError(msg)
     try:
         code = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         raise ReviewConfigurationError(f"Cannot read {path}: {exc}") from exc
-
-    cfg = apply_env_overrides(load_config_file())
     eff_model = model if model is not None else cfg.default_model
     eff_log = (log_level or cfg.log_level).upper()
 

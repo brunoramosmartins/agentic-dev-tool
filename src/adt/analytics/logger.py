@@ -13,6 +13,7 @@ LEARNING_LOG_NAME = "learning.jsonl"
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 _BACKUP_COUNT = 5
 _LOGGER_NAME = "adt.learning"
+_failure_reported: bool = False
 
 
 def learning_log_path(log_dir: Path | None = None) -> Path:
@@ -87,10 +88,22 @@ def log_learning_event(
     Failures are swallowed (the analytics layer is best-effort; a write
     failure must never break the user-facing command).
     """
+    global _failure_reported  # noqa: PLW0603
     try:
         setup_learning_logger(log_dir=log_dir)
         log = logging.getLogger(_LOGGER_NAME)
         serialized = json.dumps(event.model_dump(mode="json"), default=str)
         log.info("", extra={"learning": serialized})
+        _failure_reported = False
     except Exception:  # noqa: BLE001 - best-effort analytics
-        return
+        if not _failure_reported:
+            _failure_reported = True
+            from adt.logging.json_log import log_adt
+
+            _warn_log = logging.getLogger("adt.analytics")
+            log_adt(
+                _warn_log,
+                logging.WARNING,
+                event="learning_log_failed",
+                detail="Could not write to learning log; analytics are inactive.",
+            )

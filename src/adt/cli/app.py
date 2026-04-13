@@ -22,6 +22,11 @@ from adt.review_session import ReviewConfigurationError, run_review
 app = typer.Typer(help="Agentic Dev Tool CLI", add_completion=False)
 config_app = typer.Typer(help="View or edit ~/.adt/config.toml", add_completion=False)
 app.add_typer(config_app, name="config")
+session_app = typer.Typer(
+    help="Inspect or manage the supervised session state.",
+    add_completion=False,
+)
+app.add_typer(session_app, name="session")
 console = Console()
 
 _VALID_AGENTS = frozenset({"repo_agent", "research_agent", "project_agent"})
@@ -291,6 +296,16 @@ def ask_cmd(
             exe.supervised_response,
             level=exe.supervised_level,
         )
+        # P10-01: show last-review verdict footer when a previous feedback exists
+        from adt.core.session import SessionContext
+
+        sess = SessionContext.load()
+        if sess.previous_feedback:
+            last_verdict = sess.previous_feedback[-1]
+            console.print(
+                f"[dim]Last review: {last_verdict}"
+                f" — continue at step {sess.current_step}/{sess.total_steps}[/dim]",
+            )
     else:
         _format_ask_panel(response.routed_agent or agent or "", response.answer)
     tools_line = ", ".join(response.tools_used) if response.tools_used else "none"
@@ -342,6 +357,13 @@ def review_cmd(
         bool,
         typer.Option("--verbose", "-v", help="Print debug logs."),
     ] = False,
+    max_bytes: Annotated[
+        int | None,
+        typer.Option(
+            "--max-bytes",
+            help="Override the maximum file size for review (in bytes).",
+        ),
+    ] = None,
 ) -> None:
     """Review a source file in supervised mode and print structured feedback."""
     valid_levels = {"beginner", "intermediate", "advanced"}
@@ -359,6 +381,7 @@ def review_cmd(
             level=level,
             model=model,
             verbose=verbose,
+            max_bytes=max_bytes,
         )
     except ReviewConfigurationError as exc:
         console.print(f"[red]{exc}[/red]")
@@ -412,6 +435,63 @@ def stats_cmd(
     events = read_learning_events()
     stats = compute_stats(events, last_n=last)
     StatsRenderer(console).render(stats)
+
+
+# ── session subcommands (P10-03) ──────────────────────────────────────
+
+
+@session_app.command("show")
+def session_show_cmd() -> None:
+    """Print the current supervised session as a Rich table."""
+    from adt.cli.session_renderer import SessionRenderer
+    from adt.core.session import SessionContext
+
+    sess = SessionContext.load()
+    SessionRenderer(console).render(sess)
+
+
+@session_app.command("clear")
+def session_clear_cmd(
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Skip confirmation prompt."),
+    ] = False,
+) -> None:
+    """Delete the current session file (~/.adt/session.json)."""
+    from adt.core.session import SessionContext, session_file_path
+
+    path = session_file_path()
+    if not path.exists():
+        console.print("[dim]No session file found — nothing to clear.[/dim]")
+        return
+    if not yes:
+        typer.confirm("Delete the current supervised session?", abort=True)
+    SessionContext.reset()
+    console.print("[green]Session cleared.[/green]")
+
+
+@session_app.command("export")
+def session_export_cmd(
+    out: Annotated[
+        str | None,
+        typer.Argument(help="Output path (omit to print to stdout)."),
+    ] = None,
+) -> None:
+    """Dump the session JSON to stdout or a file."""
+    from adt.core.session import session_file_path
+
+    path = session_file_path()
+    if not path.exists():
+        console.print("[dim]No session file found.[/dim]")
+        raise typer.Exit(code=1)
+    content = path.read_text(encoding="utf-8")
+    if out is None:
+        console.print_json(content)
+    else:
+        from pathlib import Path
+
+        Path(out).write_text(content, encoding="utf-8")
+        console.print(f"[green]Session exported to {out}[/green]")
 
 
 @app.command("serve")

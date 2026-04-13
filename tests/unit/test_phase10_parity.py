@@ -163,9 +163,7 @@ class TestPostReview:
     def test_review_missing_key(self, mock_review: MagicMock) -> None:
         from adt.review_session import ReviewConfigurationError
 
-        mock_review.side_effect = ReviewConfigurationError(
-            "Missing OPENAI_API_KEY."
-        )
+        mock_review.side_effect = ReviewConfigurationError("Missing OPENAI_API_KEY.")
         res = client.post("/review", json={"file_content": "x=1"})
         assert res.status_code == 503
 
@@ -186,9 +184,7 @@ class TestGetStats:
 
 class TestSessions:
     def test_list_sessions(self, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.setattr(
-            "adt.core.session_store.ensure_adt_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("adt.core.session_store.ensure_adt_dir", lambda: tmp_path)
         sessions_dir = tmp_path / "sessions"
         sessions_dir.mkdir()
         (sessions_dir / "alpha.json").write_text("{}", encoding="utf-8")
@@ -198,9 +194,7 @@ class TestSessions:
         assert res.json() == ["alpha", "beta"]
 
     def test_get_session(self, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.setattr(
-            "adt.core.session_store.ensure_adt_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("adt.core.session_store.ensure_adt_dir", lambda: tmp_path)
         sessions_dir = tmp_path / "sessions"
         sessions_dir.mkdir()
         data = {
@@ -210,9 +204,7 @@ class TestSessions:
             "previous_feedback": ["on_track"],
             "iteration_count": 3,
         }
-        (sessions_dir / "algo.json").write_text(
-            json.dumps(data), encoding="utf-8"
-        )
+        (sessions_dir / "algo.json").write_text(json.dumps(data), encoding="utf-8")
         res = client.get("/sessions/algo")
         assert res.status_code == 200
         body = res.json()
@@ -220,17 +212,13 @@ class TestSessions:
         assert body["current_step"] == 2
 
     def test_get_session_missing(self, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.setattr(
-            "adt.core.session_store.ensure_adt_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("adt.core.session_store.ensure_adt_dir", lambda: tmp_path)
         res = client.get("/sessions/nonexistent")
         assert res.status_code == 200  # returns empty session
         assert res.json()["current_step"] == 0
 
     def test_delete_session(self, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.setattr(
-            "adt.core.session_store.ensure_adt_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("adt.core.session_store.ensure_adt_dir", lambda: tmp_path)
         sessions_dir = tmp_path / "sessions"
         sessions_dir.mkdir()
         sf = sessions_dir / "temp.json"
@@ -241,9 +229,7 @@ class TestSessions:
         assert not sf.exists()
 
     def test_delete_session_missing(self, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.setattr(
-            "adt.core.session_store.ensure_adt_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("adt.core.session_store.ensure_adt_dir", lambda: tmp_path)
         res = client.delete("/sessions/ghost")
         assert res.status_code == 404
 

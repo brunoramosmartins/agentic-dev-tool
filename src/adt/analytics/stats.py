@@ -62,6 +62,7 @@ def compute_stats(
     events: list[LearningEvent],
     *,
     last_n: int | None = None,
+    classifier: str = "keyword",
 ) -> LearningStats:
     """Derive :class:`LearningStats` from a list of events.
 

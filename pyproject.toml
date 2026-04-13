@@ -146,6 +146,9 @@ addopts = "-ra -q --strict-markers -m \"not live\""
 markers = [
   "live: calls real external APIs (not run in CI by default)",
 ]
+filterwarnings = [
+  "ignore::DeprecationWarning:pathspec.*",
+]
 
 [tool.coverage.run]
 source = ["adt"]

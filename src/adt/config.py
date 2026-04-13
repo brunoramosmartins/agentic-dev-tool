@@ -40,6 +40,7 @@ class AdtConfig:
     review_max_bytes: int = 200_000
     agent_chain: list[str] = field(default_factory=list)
     custom_tools: list[str] = field(default_factory=list)
+    lang: str = "en"
 
     def to_toml_table(self) -> dict[str, Any]:
         """Serialize the ``adt`` table for writing."""
@@ -53,6 +54,7 @@ class AdtConfig:
             "review_max_bytes": self.review_max_bytes,
             "agent_chain": self.agent_chain,
             "custom_tools": self.custom_tools,
+            "lang": self.lang,
         }
         if self.token_budget is not None:
             d["token_budget"] = self.token_budget
@@ -74,6 +76,7 @@ class AdtConfig:
             ("review_max_bytes", 200_000),
             ("agent_chain", []),
             ("custom_tools", []),
+            ("lang", "en"),
         ]:
             if key not in known:
                 continue
@@ -146,6 +149,7 @@ def apply_env_overrides(cfg: AdtConfig) -> AdtConfig:
         token_budget=cfg.token_budget,
         agent_chain=list(cfg.agent_chain),
         custom_tools=list(cfg.custom_tools),
+        lang=os.environ.get("ADT_LANG", cfg.lang),
     )
     if os.environ.get("ADT_CACHE_TTL", "").strip():
         with contextlib.suppress(ValueError):
@@ -208,6 +212,8 @@ def update_config_key(path: Path | None, key: str, value: str) -> AdtConfig:
     elif key_norm == "custom_tools":
         parts = [p.strip() for p in value.split(",") if p.strip()]
         cfg = replace(cfg, custom_tools=parts)
+    elif key_norm == "lang":
+        cfg = replace(cfg, lang=value.strip())
     else:
         msg = f"Unknown config key: {key!r}"
         raise ValueError(msg)

@@ -502,6 +502,13 @@ def stats_cmd(
             help="Issue classifier strategy: keyword (default) or embedding.",
         ),
     ] = "keyword",
+    html: Annotated[
+        str | None,
+        typer.Option(
+            "--html",
+            help="Generate an HTML dashboard to this directory.",
+        ),
+    ] = None,
 ) -> None:
     """Summarize supervised learning progress from ``~/.adt/logs/learning.jsonl``."""
     from adt.analytics import compute_stats, read_learning_events
@@ -528,6 +535,19 @@ def stats_cmd(
 
     events = read_learning_events()
     stats = compute_stats(events, last_n=last, classifier=classifier)
+
+    if html is not None:
+        from pathlib import Path as _HtmlPath
+
+        from adt.analytics.html_export import export_html
+
+        html_dir = _HtmlPath(html)
+        html_dir.mkdir(parents=True, exist_ok=True)
+        html_content = export_html(stats)
+        html_file = html_dir / "index.html"
+        html_file.write_text(html_content, encoding="utf-8")
+        console.print(f"[green]Dashboard written to {html_file}[/green]")
+        return
 
     if export is not None:
         from adt.analytics.exporter import export_csv, export_json, export_markdown

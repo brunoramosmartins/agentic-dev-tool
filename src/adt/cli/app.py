@@ -229,6 +229,13 @@ def ask_cmd(
             ),
         ),
     ] = None,
+    session: Annotated[
+        str,
+        typer.Option(
+            "--session",
+            help="Named session to use for supervised mode (default: 'default').",
+        ),
+    ] = "default",
 ) -> None:
     """Ask a question: supervisor picks an agent unless ``--agent`` is set."""
     valid_modes = {"execution", "supervised"}
@@ -273,6 +280,7 @@ def ask_cmd(
             trace=trace,
             mode=mode,
             level=effective_level,
+            session_name=session,
         )
     except AskConfigurationError as exc:
         console.print(f"[red]{exc}[/red]")
@@ -297,9 +305,9 @@ def ask_cmd(
             level=exe.supervised_level,
         )
         # P10-01: show last-review verdict footer when a previous feedback exists
-        from adt.core.session import SessionContext
+        from adt.core.session_store import SessionStore
 
-        sess = SessionContext.load()
+        sess = SessionStore().load(session)
         if sess.previous_feedback:
             last_verdict = sess.previous_feedback[-1]
             console.print(
@@ -364,6 +372,13 @@ def review_cmd(
             help="Override the maximum file size for review (in bytes).",
         ),
     ] = None,
+    session: Annotated[
+        str,
+        typer.Option(
+            "--session",
+            help="Named session to use (default: 'default').",
+        ),
+    ] = "default",
 ) -> None:
     """Review a source file in supervised mode and print structured feedback."""
     valid_levels = {"beginner", "intermediate", "advanced"}
@@ -382,6 +397,7 @@ def review_cmd(
             model=model,
             verbose=verbose,
             max_bytes=max_bytes,
+            session_name=session,
         )
     except ReviewConfigurationError as exc:
         console.print(f"[red]{exc}[/red]")
@@ -437,37 +453,59 @@ def stats_cmd(
     StatsRenderer(console).render(stats)
 
 
-# ── session subcommands (P10-03) ──────────────────────────────────────
+# ── session subcommands (P10-03 / P10-06) ────────────────────────────
 
 
 @session_app.command("show")
-def session_show_cmd() -> None:
-    """Print the current supervised session as a Rich table."""
+def session_show_cmd(
+    name: Annotated[
+        str,
+        typer.Option("--name", "-n", help="Session name to inspect."),
+    ] = "default",
+) -> None:
+    """Print a supervised session as a Rich table."""
     from adt.cli.session_renderer import SessionRenderer
-    from adt.core.session import SessionContext
+    from adt.core.session_store import SessionStore
 
-    sess = SessionContext.load()
+    sess = SessionStore().load(name)
     SessionRenderer(console).render(sess)
+
+
+@session_app.command("list")
+def session_list_cmd() -> None:
+    """List all named sessions."""
+    from adt.core.session_store import SessionStore
+
+    names = SessionStore().list()
+    if not names:
+        console.print("[dim]No sessions found.[/dim]")
+        return
+    for n in names:
+        console.print(f"  {n}")
 
 
 @session_app.command("clear")
 def session_clear_cmd(
+    name: Annotated[
+        str,
+        typer.Option("--name", "-n", help="Session name to delete."),
+    ] = "default",
     yes: Annotated[
         bool,
         typer.Option("--yes", "-y", help="Skip confirmation prompt."),
     ] = False,
 ) -> None:
-    """Delete the current session file (~/.adt/session.json)."""
-    from adt.core.session import SessionContext, session_file_path
+    """Delete a named session file."""
+    from adt.core.session_store import SessionStore
 
-    path = session_file_path()
-    if not path.exists():
-        console.print("[dim]No session file found — nothing to clear.[/dim]")
+    store = SessionStore()
+    if not store.path(name).exists():
+        console.print(f"[dim]No session '{name}' found — nothing to clear.[/dim]")
         return
     if not yes:
-        typer.confirm("Delete the current supervised session?", abort=True)
-    SessionContext.reset()
-    console.print("[green]Session cleared.[/green]")
+        typer.confirm(f"Delete session '{name}'?", abort=True)
+    store.delete(name)
+    console.print(f"[green]Session '{name}' cleared.[/green]")
 
 
 @session_app.command("export")
@@ -476,13 +514,18 @@ def session_export_cmd(
         str | None,
         typer.Argument(help="Output path (omit to print to stdout)."),
     ] = None,
+    name: Annotated[
+        str,
+        typer.Option("--name", "-n", help="Session name to export."),
+    ] = "default",
 ) -> None:
     """Dump the session JSON to stdout or a file."""
-    from adt.core.session import session_file_path
+    from adt.core.session_store import SessionStore
 
-    path = session_file_path()
+    store = SessionStore()
+    path = store.path(name)
     if not path.exists():
-        console.print("[dim]No session file found.[/dim]")
+        console.print(f"[dim]No session '{name}' found.[/dim]")
         raise typer.Exit(code=1)
     content = path.read_text(encoding="utf-8")
     if out is None:

@@ -10,7 +10,6 @@ from typing import Any
 from adt.bootstrap import build_runner
 from adt.config import apply_env_overrides, load_config_file
 from adt.core.runner import Runner
-from adt.core.session import SessionContext
 from adt.logging.json_log import setup_adt_file_logging
 from adt.models.schemas import AgentResponse, QueryRequest, SupervisedResponse
 from adt.repo_spec import resolve_repo_targets
@@ -48,6 +47,7 @@ def run_ask(
     trace: bool = False,
     mode: str = "execution",
     level: str = "intermediate",
+    session_name: str = "default",
 ) -> AskExecution:
     """Resolve repos, build a :class:`~adt.core.runner.Runner`, and run the query.
 
@@ -147,17 +147,21 @@ def run_ask(
 
         supervised_resp = parse_supervised_response(response.answer)
         if supervised_resp is not None:
-            sess = SessionContext.load()
+            from adt.core.session_store import SessionStore
+
+            store = SessionStore()
+            sess = store.load(session_name)
             sess.update_from_supervised(supervised_resp)
-            sess.save()
+            store.save(sess, session_name)
 
             usage = runner.last_token_usage or {}
-            trace_id = trace_ctx.trace_id if trace_ctx is not None else ""
+            trace_id = trace_ctx.trace_id if trace_ctx is not None else None
             completion_ms: int | None = None
             if trace_ctx is not None:
                 completion_ms = int(trace_ctx.elapsed_ms())
             event = LearningEvent(
                 trace_id=trace_id,
+                session_name=session_name,
                 component="supervisor",
                 event_type="supervised_step",
                 step_id=supervised_resp.current_step.step_number,

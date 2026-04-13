@@ -10,6 +10,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -22,8 +23,13 @@ from adt.cli.app import app
 runner = CliRunner()
 
 
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from *text*."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
 def _seed_session(path: Path, **overrides: object) -> None:
-    """Write a synthetic ``session.json``."""
+    """Write a synthetic session JSON file."""
     data = {
         "problem_summary": "Binary search",
         "current_step": 3,
@@ -141,23 +147,25 @@ class TestWarnOnce:
 # ── P10-03: adt session subcommands ─────────────────────────────────────
 
 
+def _patch_session_store(monkeypatch, tmp_path):
+    """Point ``SessionStore`` to *tmp_path* so tests never touch ``~/.adt``."""
+    monkeypatch.setattr(
+        "adt.core.session_store.ensure_adt_dir",
+        lambda: tmp_path,
+    )
+
+
 class TestSessionShow:
     def test_show_empty(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(
-            "adt.core.session.session_file_path",
-            lambda: tmp_path / "session.json",
-        )
+        _patch_session_store(monkeypatch, tmp_path)
         result = runner.invoke(app, ["session", "show"])
         assert result.exit_code == 0
         assert "No active supervised session" in result.stdout
 
     def test_show_with_session(self, tmp_path, monkeypatch):
-        sf = tmp_path / "session.json"
+        _patch_session_store(monkeypatch, tmp_path)
+        sf = tmp_path / "sessions" / "default.json"
         _seed_session(sf)
-        monkeypatch.setattr(
-            "adt.core.session.session_file_path",
-            lambda: sf,
-        )
         result = runner.invoke(app, ["session", "show"])
         assert result.exit_code == 0
         assert "Binary search" in result.stdout
@@ -167,22 +175,16 @@ class TestSessionShow:
 
 class TestSessionClear:
     def test_clear_with_confirm(self, tmp_path, monkeypatch):
-        sf = tmp_path / "session.json"
+        _patch_session_store(monkeypatch, tmp_path)
+        sf = tmp_path / "sessions" / "default.json"
         _seed_session(sf)
-        monkeypatch.setattr(
-            "adt.core.session.session_file_path",
-            lambda: sf,
-        )
         result = runner.invoke(app, ["session", "clear", "--yes"])
         assert result.exit_code == 0
         assert "cleared" in result.stdout.lower()
         assert not sf.exists()
 
     def test_clear_no_file(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(
-            "adt.core.session.session_file_path",
-            lambda: tmp_path / "session.json",
-        )
+        _patch_session_store(monkeypatch, tmp_path)
         result = runner.invoke(app, ["session", "clear"])
         assert result.exit_code == 0
         assert "nothing to clear" in result.stdout.lower()
@@ -190,23 +192,17 @@ class TestSessionClear:
 
 class TestSessionExport:
     def test_export_to_stdout(self, tmp_path, monkeypatch):
-        sf = tmp_path / "session.json"
+        _patch_session_store(monkeypatch, tmp_path)
+        sf = tmp_path / "sessions" / "default.json"
         _seed_session(sf)
-        monkeypatch.setattr(
-            "adt.core.session.session_file_path",
-            lambda: sf,
-        )
         result = runner.invoke(app, ["session", "export"])
         assert result.exit_code == 0
         assert "Binary search" in result.stdout
 
     def test_export_to_file(self, tmp_path, monkeypatch):
-        sf = tmp_path / "session.json"
+        _patch_session_store(monkeypatch, tmp_path)
+        sf = tmp_path / "sessions" / "default.json"
         _seed_session(sf)
-        monkeypatch.setattr(
-            "adt.core.session.session_file_path",
-            lambda: sf,
-        )
         out = tmp_path / "out.json"
         result = runner.invoke(app, ["session", "export", str(out)])
         assert result.exit_code == 0
@@ -215,10 +211,7 @@ class TestSessionExport:
         assert data["problem_summary"] == "Binary search"
 
     def test_export_no_file(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(
-            "adt.core.session.session_file_path",
-            lambda: tmp_path / "session.json",
-        )
+        _patch_session_store(monkeypatch, tmp_path)
         result = runner.invoke(app, ["session", "export"])
         assert result.exit_code == 1
 
@@ -280,4 +273,4 @@ class TestReviewMaxBytes:
     def test_cli_max_bytes_flag_exists(self):
         """The --max-bytes flag is present in the review command help."""
         result = runner.invoke(app, ["review", "--help"])
-        assert "--max-bytes" in result.stdout
+        assert "--max-bytes" in _strip_ansi(result.stdout)

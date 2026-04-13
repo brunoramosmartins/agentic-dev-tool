@@ -11,8 +11,12 @@ from __future__ import annotations
 import logging
 from importlib import resources
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adt.logging.json_log import log_adt
+
+if TYPE_CHECKING:
+    from adt.skills.context import SkillContext
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +100,26 @@ def load_skill_content(
     if use_cache:
         _cache = content
     return content
+
+
+def load_skill_context(
+    *,
+    path: Path | None = None,
+    use_cache: bool = True,
+) -> SkillContext:
+    """Return a :class:`~adt.skills.context.SkillContext` for this skill.
+
+    Wraps :func:`load_skill_content` and parses the version comment
+    from the Markdown header.
+    """
+    from adt.skills.context import SkillContext, parse_version
+
+    markdown = load_skill_content(path=path, use_cache=use_cache)
+    return SkillContext(
+        name=SKILL_NAME,
+        markdown=markdown,
+        version=parse_version(markdown),
+    )
 
 
 def reset_cache() -> None:

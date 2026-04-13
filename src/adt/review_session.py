@@ -54,6 +54,7 @@ def run_review(
     llm: LLMBackend | None = None,
     session: SessionContext | None = None,
     max_bytes: int | None = None,
+    session_name: str = "default",
 ) -> ReviewExecution:
     """Read ``file``, send it to the reviewer LLM, return parsed feedback.
 
@@ -104,7 +105,12 @@ def run_review(
         setup_adt_file_logging(level=lvl)
         logging.getLogger("adt").setLevel(lvl)
 
-    sess = session if session is not None else SessionContext.load()
+    if session is not None:
+        sess = session
+    else:
+        from adt.core.session_store import SessionStore
+
+        sess = SessionStore().load(session_name)
 
     if llm is None:
         api_key = os.environ.get("OPENAI_API_KEY")
@@ -157,13 +163,19 @@ def run_review(
     feedback = parse_review_feedback(raw_answer)
     if feedback is not None:
         sess.record_feedback(feedback.overall_assessment)
-        sess.save()
+        if session is None:
+            from adt.core.session_store import SessionStore as _SS
+
+            _SS().save(sess, session_name)
+        else:
+            sess.save()
 
         from adt.analytics import LearningEvent, categorize_issue, log_learning_event
 
         error_types = [categorize_issue(issue) for issue in feedback.issues]
         event = LearningEvent(
-            trace_id="",
+            trace_id=None,
+            session_name=session_name,
             component="reviewer",
             event_type="code_review",
             step_id=sess.current_step,

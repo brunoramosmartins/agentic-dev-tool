@@ -51,7 +51,11 @@ def _mean(values: list[float]) -> float:
 
 def _session_key(event: LearningEvent) -> str:
     key = (event.problem_summary or "").strip().lower()
-    return key or f"trace:{event.trace_id}"
+    if key:
+        return key
+    if event.session_name:
+        return f"session:{event.session_name}"
+    return f"trace:{event.trace_id or 'unknown'}"
 
 
 def compute_stats(

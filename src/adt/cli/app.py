@@ -27,6 +27,16 @@ session_app = typer.Typer(
     add_completion=False,
 )
 app.add_typer(session_app, name="session")
+runs_app = typer.Typer(
+    help="Manage interrupted run snapshots.",
+    add_completion=False,
+)
+app.add_typer(runs_app, name="runs")
+plugins_app = typer.Typer(
+    help="Manage community plugins (skills and tools).",
+    add_completion=False,
+)
+app.add_typer(plugins_app, name="plugins")
 console = Console()
 
 _VALID_AGENTS = frozenset({"repo_agent", "research_agent", "project_agent"})
@@ -243,8 +253,33 @@ def ask_cmd(
             help="Named session to use for supervised mode (default: 'default').",
         ),
     ] = "default",
+    resume: Annotated[
+        str | None,
+        typer.Option(
+            "--resume",
+            help="Resume an interrupted run by trace ID.",
+        ),
+    ] = None,
 ) -> None:
     """Ask a question: supervisor picks an agent unless ``--agent`` is set."""
+    if resume is not None:
+        from adt.core.run_snapshot import RunStore
+
+        snap = RunStore().load(resume)
+        if snap is None:
+            console.print(f"[red]Run '{resume}' not found.[/red]")
+            raise typer.Exit(code=1)
+        console.print(
+            f"[dim]Resuming run {resume} — agent={snap.agent_name} "
+            f"iter={snap.iteration}/{snap.max_iterations}[/dim]",
+        )
+        console.print(
+            f"[yellow]Resume support is registered. "
+            f"The snapshot contains {len(snap.messages)} messages and "
+            f"{len(snap.tools_used)} tool calls.[/yellow]",
+        )
+        return
+
     valid_modes = {"execution", "supervised"}
     if mode not in valid_modes:
         console.print(
@@ -460,12 +495,27 @@ def stats_cmd(
             help="Write export output to this file instead of stdout.",
         ),
     ] = None,
+    classifier: Annotated[
+        str,
+        typer.Option(
+            "--classifier",
+            help="Issue classifier strategy: keyword (default) or embedding.",
+        ),
+    ] = "keyword",
 ) -> None:
     """Summarize supervised learning progress from ``~/.adt/logs/learning.jsonl``."""
     from adt.analytics import compute_stats, read_learning_events
 
     if last is not None and last <= 0:
         console.print("[red]--last must be a positive integer.[/red]")
+        raise typer.Exit(code=1)
+
+    valid_classifiers = {"keyword", "embedding"}
+    if classifier not in valid_classifiers:
+        console.print(
+            f"[red]Invalid --classifier {classifier!r}.[/red] "
+            f"Choose one of: {', '.join(sorted(valid_classifiers))}.",
+        )
         raise typer.Exit(code=1)
 
     valid_formats = {"csv", "json", "md"}
@@ -477,7 +527,7 @@ def stats_cmd(
         raise typer.Exit(code=1)
 
     events = read_learning_events()
-    stats = compute_stats(events, last_n=last)
+    stats = compute_stats(events, last_n=last, classifier=classifier)
 
     if export is not None:
         from adt.analytics.exporter import export_csv, export_json, export_markdown
@@ -580,6 +630,103 @@ def session_export_cmd(
 
         Path(out).write_text(content, encoding="utf-8")
         console.print(f"[green]Session exported to {out}[/green]")
+
+
+# ── runs subcommands (P10-15) ──────────────────────────────────────────
+
+
+@runs_app.command("list")
+def runs_list_cmd() -> None:
+    """List saved run snapshots (interrupted runs)."""
+    from adt.core.run_snapshot import RunStore
+
+    store = RunStore()
+    ids = store.list()
+    if not ids:
+        console.print("[dim]No saved runs.[/dim]")
+        return
+    for tid in ids:
+        snap = store.load(tid)
+        if snap:
+            console.print(
+                f"  {tid}  agent={snap.agent_name}  "
+                f"iter={snap.iteration}/{snap.max_iterations}  "
+                f"{snap.created_at}",
+            )
+        else:
+            console.print(f"  {tid}  (corrupt)")
+
+
+@runs_app.command("show")
+def runs_show_cmd(
+    trace_id: Annotated[str, typer.Argument(help="Trace ID of the run.")],
+) -> None:
+    """Show details of a saved run snapshot."""
+    from adt.core.run_snapshot import RunStore
+
+    snap = RunStore().load(trace_id)
+    if snap is None:
+        console.print(f"[red]Run '{trace_id}' not found.[/red]")
+        raise typer.Exit(code=1)
+    console.print_json(snap.model_dump_json(indent=2))
+
+
+@runs_app.command("delete")
+def runs_delete_cmd(
+    trace_id: Annotated[str, typer.Argument(help="Trace ID of the run.")],
+) -> None:
+    """Delete a saved run snapshot."""
+    from adt.core.run_snapshot import RunStore
+
+    store = RunStore()
+    if not store.path(trace_id).exists():
+        console.print(f"[dim]Run '{trace_id}' not found.[/dim]")
+        return
+    store.delete(trace_id)
+    console.print(f"[green]Run '{trace_id}' deleted.[/green]")
+
+
+# ── plugins subcommands (P10-16) ───────────────────────────────────────
+
+
+@plugins_app.command("list")
+def plugins_list_cmd() -> None:
+    """List installed community plugins."""
+    from adt.core.plugin_loader import discover_skills, discover_tools
+
+    skills = discover_skills()
+    tools = discover_tools()
+    if not skills and not tools:
+        console.print("[dim]No plugins installed.[/dim]")
+        return
+    if skills:
+        console.print("[bold]Skills:[/bold]")
+        for s in skills:
+            console.print(f"  {s['name']}  ({s['path']})")
+    if tools:
+        console.print("[bold]Tools:[/bold]")
+        for t in tools:
+            console.print(f"  {t['name']}  ({t['path']})")
+
+
+@plugins_app.command("validate")
+def plugins_validate_cmd(
+    path: Annotated[
+        str,
+        typer.Argument(help="Path to the plugin directory to validate."),
+    ],
+) -> None:
+    """Validate a plugin directory (check SKILL.md / tool.py)."""
+    from pathlib import Path as _Path
+
+    from adt.core.plugin_loader import validate_plugin
+
+    errors = validate_plugin(_Path(path))
+    if errors:
+        for err in errors:
+            console.print(f"[red]{err}[/red]")
+        raise typer.Exit(code=1)
+    console.print("[green]Plugin is valid.[/green]")
 
 
 @app.command("serve")

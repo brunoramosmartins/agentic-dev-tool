@@ -27,6 +27,7 @@ from adt.models.schemas import (
 
 if TYPE_CHECKING:
     from adt.core.hybrid_supervisor import HybridSupervisor
+    from adt.core.run_snapshot import RunSnapshot
     from adt.core.supervisor import Supervisor
     from adt.tracing.context import TraceContext
 
@@ -485,6 +486,69 @@ class Runner:
             context_summary=context_summary,
             routed_agent=routed.agent_name,
         )
+
+    def snapshot(
+        self,
+        *,
+        trace_id: str,
+        agent_name: str,
+        query: str,
+        messages: list[LLMMessage],
+        tools_used: list[str],
+        iteration: int,
+        context_summary: str = "",
+    ) -> RunSnapshot:
+        """Create a serializable snapshot of current tool-loop state."""
+        from adt.core.run_snapshot import RunSnapshot
+
+        raw_msgs = []
+        for m in messages:
+            entry: dict[str, Any] = {"role": m.role, "content": m.content}
+            if m.tool_calls:
+                entry["tool_calls"] = [
+                    {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
+                    for tc in m.tool_calls
+                ]
+            if m.tool_call_id:
+                entry["tool_call_id"] = m.tool_call_id
+            raw_msgs.append(entry)
+        model = getattr(self._llm, "model", "gpt-4o-mini")
+        return RunSnapshot(
+            trace_id=trace_id,
+            agent_name=agent_name,
+            query=query,
+            messages=raw_msgs,
+            tools_used=list(tools_used),
+            iteration=iteration,
+            max_iterations=self._max_tool_iterations,
+            context_summary=context_summary,
+            model=model,
+        )
+
+    @staticmethod
+    def restore_messages(snapshot: RunSnapshot) -> list[LLMMessage]:
+        """Reconstruct :class:`LLMMessage` objects from a snapshot."""
+        messages: list[LLMMessage] = []
+        for raw in snapshot.messages:
+            tool_calls = None
+            if "tool_calls" in raw:
+                tool_calls = [
+                    ToolCall(
+                        id=tc.get("id", ""),
+                        name=tc["name"],
+                        arguments=tc.get("arguments", {}),
+                    )
+                    for tc in raw["tool_calls"]
+                ]
+            messages.append(
+                LLMMessage(
+                    role=raw["role"],
+                    content=raw.get("content", ""),
+                    tool_calls=tool_calls,
+                    tool_call_id=raw.get("tool_call_id"),
+                )
+            )
+        return messages
 
     def _tools_for_agent(self, agent: BaseAgent) -> list[dict[str, Any]]:
         all_tools = self._registry.to_openai_format(agent.name)

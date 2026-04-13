@@ -33,9 +33,7 @@ def validate_key_value(key: str, raw: str) -> None:
 
     if k not in _KNOWN_KEYS:
         known = ", ".join(sorted(_KNOWN_KEYS))
-        raise ConfigValidationError(
-            f"Unknown config key: {key!r}. Valid keys: {known}"
-        )
+        raise ConfigValidationError(f"Unknown config key: {key!r}. Valid keys: {known}")
 
     if k == "log_level":
         if raw.upper() not in _VALID_LOG_LEVELS:
@@ -69,9 +67,7 @@ def validate_key_value(key: str, raw: str) -> None:
                 f"max_tool_iterations must be a positive integer, got {raw!r}."
             )
         if int(raw) < 1:
-            raise ConfigValidationError(
-                "max_tool_iterations must be at least 1."
-            )
+            raise ConfigValidationError("max_tool_iterations must be at least 1.")
 
     elif k == "token_budget":
         if raw.lower() not in ("none", ""):

@@ -98,6 +98,16 @@ def validate_key_value(key: str, raw: str) -> None:
                 "lang must be a non-empty locale code (e.g. 'en', 'pt_BR')."
             )
 
+    elif k == "cost_confirm_threshold":
+        try:
+            val_f = float(raw)
+        except ValueError:
+            raise ConfigValidationError(
+                f"cost_confirm_threshold must be a number, got {raw!r}."
+            ) from None
+        if val_f < 0:
+            raise ConfigValidationError("cost_confirm_threshold must be non-negative.")
+
     elif k == "agent_chain":
         parts = [p.strip() for p in raw.split(",") if p.strip()]
         for part in parts:

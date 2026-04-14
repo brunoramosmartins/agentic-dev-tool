@@ -81,6 +81,20 @@ tools_header = "Tools"
 [config]
 unknown_key = "Unknown config key: {key}"
 
+[shell]
+welcome = "adt shell — interactive agent REPL"
+help_hint = "Type /help for commands, Ctrl+D to exit."
+bye = "Bye!"
+interrupted = "Interrupted. Type /exit to quit."
+trace_on = "Tracing enabled."
+trace_off = "Tracing disabled."
+agent_cleared = "Agent override cleared."
+agent_forced = "Agent forced to '{name}'."
+switched_session = "Switched to session '{name}'."
+cost_threshold = "Cost confirmation threshold: ${value}"
+estimated_cost = "Estimated cost: ${cost} (threshold: ${threshold})"
+cancelled = "Cancelled."
+
 [errors]
 invalid_mode = "Invalid --mode {mode}. Choose one of: {options}."
 invalid_level = "Invalid --level {level}. Choose one of: {options}."
@@ -88,3 +102,4 @@ invalid_agent = "Invalid --agent. Choose one of: {options}."
 unexpected = "Unexpected error while running the agent."
 missing_api_key = "Missing OPENAI_API_KEY. Set it in the environment or in a .env file."
 missing_api_deps = "Missing API dependencies. Install with: pip install 'agentic-dev-tool[api]'"
+missing_shell_deps = "Install agentic-dev-tool[shell] to use adt shell."

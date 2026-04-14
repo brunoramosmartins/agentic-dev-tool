@@ -41,6 +41,7 @@ class AdtConfig:
     agent_chain: list[str] = field(default_factory=list)
     custom_tools: list[str] = field(default_factory=list)
     lang: str = "en"
+    cost_confirm_threshold: float = 0.05
 
     def to_toml_table(self) -> dict[str, Any]:
         """Serialize the ``adt`` table for writing."""
@@ -55,6 +56,7 @@ class AdtConfig:
             "agent_chain": self.agent_chain,
             "custom_tools": self.custom_tools,
             "lang": self.lang,
+            "cost_confirm_threshold": self.cost_confirm_threshold,
         }
         if self.token_budget is not None:
             d["token_budget"] = self.token_budget
@@ -77,6 +79,7 @@ class AdtConfig:
             ("agent_chain", []),
             ("custom_tools", []),
             ("lang", "en"),
+            ("cost_confirm_threshold", 0.05),
         ]:
             if key not in known:
                 continue
@@ -104,6 +107,11 @@ class AdtConfig:
                         kwargs[key] = int(raw)
                     except (TypeError, ValueError):
                         kwargs[key] = None
+            elif key == "cost_confirm_threshold":
+                try:
+                    kwargs[key] = float(raw)
+                except (TypeError, ValueError):
+                    kwargs[key] = 0.05
             elif key in ("use_llm_routing",):
                 if isinstance(raw, str):
                     kwargs[key] = raw.strip().lower() in ("1", "true", "yes", "on")
@@ -214,6 +222,8 @@ def update_config_key(path: Path | None, key: str, value: str) -> AdtConfig:
         cfg = replace(cfg, custom_tools=parts)
     elif key_norm == "lang":
         cfg = replace(cfg, lang=value.strip())
+    elif key_norm == "cost_confirm_threshold":
+        cfg = replace(cfg, cost_confirm_threshold=max(0.0, float(value)))
     else:
         msg = f"Unknown config key: {key!r}"
         raise ValueError(msg)

@@ -81,6 +81,20 @@ tools_header = "Ferramentas"
 [config]
 unknown_key = "Chave de configuração desconhecida: {key}"
 
+[shell]
+welcome = "adt shell — REPL interativo de agentes"
+help_hint = "Digite /help para comandos, Ctrl+D para sair."
+bye = "Até mais!"
+interrupted = "Interrompido. Digite /exit para sair."
+trace_on = "Rastreamento ativado."
+trace_off = "Rastreamento desativado."
+agent_cleared = "Agente fixo removido."
+agent_forced = "Agente fixado em '{name}'."
+switched_session = "Sessão trocada para '{name}'."
+cost_threshold = "Limite de confirmação de custo: ${value}"
+estimated_cost = "Custo estimado: ${cost} (limite: ${threshold})"
+cancelled = "Cancelado."
+
 [errors]
 invalid_mode = "--mode {mode} inválido. Escolha um dos: {options}."
 invalid_level = "--level {level} inválido. Escolha um dos: {options}."
@@ -88,3 +102,4 @@ invalid_agent = "--agent inválido. Escolha um dos: {options}."
 unexpected = "Erro inesperado ao executar o agente."
 missing_api_key = "OPENAI_API_KEY não encontrada. Defina-a no ambiente ou em um arquivo .env."
 missing_api_deps = "Dependências da API ausentes. Instale com: pip install 'agentic-dev-tool[api]'"
+missing_shell_deps = "Instale agentic-dev-tool[shell] para usar adt shell."

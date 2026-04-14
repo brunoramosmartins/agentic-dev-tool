@@ -260,6 +260,21 @@ def ask_cmd(
             help="Resume an interrupted run by trace ID.",
         ),
     ] = None,
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            "-y",
+            help="Skip cost confirmation prompt.",
+        ),
+    ] = False,
+    no_stream: Annotated[
+        bool,
+        typer.Option(
+            "--no-stream",
+            help="Disable token streaming (buffer full response).",
+        ),
+    ] = False,
 ) -> None:
     """Ask a question: supervisor picks an agent unless ``--agent`` is set."""
     if resume is not None:
@@ -773,6 +788,42 @@ def serve_cmd(
 
     console.print(f"[dim]Open http://{host}:{port}/docs[/dim]")
     uvicorn.run(api_app, host=host, port=port, log_level="info")
+
+
+@app.command("shell")
+def shell_cmd(
+    repo: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--repo",
+            "-r",
+            help="Local directory or owner/repo slug.",
+        ),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option(
+            "--model",
+            "-m",
+            help="OpenAI chat model.",
+        ),
+    ] = None,
+    trace: Annotated[
+        bool,
+        typer.Option(
+            "--trace",
+            help="Enable request tracing by default.",
+        ),
+    ] = False,
+) -> None:
+    """Open an interactive REPL (install ``agentic-dev-tool[shell]``)."""
+    try:
+        from adt.cli.shell import run_shell
+    except SystemExit as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    run_shell(console, repo=repo, model=model, trace=trace)
 
 
 if __name__ == "__main__":

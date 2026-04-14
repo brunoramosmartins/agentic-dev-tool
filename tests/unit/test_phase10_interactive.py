@@ -429,6 +429,13 @@ def test_build_completer_returns_object() -> None:
 # ── P10-25: CLI flags on ask_cmd ─────────────────────────────────────
 
 
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from text."""
+    import re
+
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
 def test_ask_cmd_accepts_yes_and_no_stream() -> None:
     """Verify --yes and --no-stream flags exist on ask_cmd."""
     from typer.testing import CliRunner
@@ -438,8 +445,9 @@ def test_ask_cmd_accepts_yes_and_no_stream() -> None:
     runner = CliRunner()
     # Just check --help mentions them
     result = runner.invoke(app, ["ask", "--help"])
-    assert "--yes" in result.output
-    assert "--no-stream" in result.output
+    clean = _strip_ansi(result.output)
+    assert "--yes" in clean
+    assert "--no-stream" in clean
 
 
 def test_shell_cmd_in_app() -> None:

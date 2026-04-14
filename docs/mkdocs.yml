@@ -4,6 +4,8 @@ site_url: https://brunoramosmartins.github.io/agentic-dev-tool
 repo_url: https://github.com/brunoramosmartins/agentic-dev-tool
 repo_name: brunoramosmartins/agentic-dev-tool
 edit_uri: edit/main/docs/
+docs_dir: .
+site_dir: ../site
 
 theme:
   name: material
